@@ -573,6 +573,8 @@ class EMApp(ttk.Frame):
     
                         if "GPGGA" in linedata:
                             S = decimal_degrees(*dm(float(splitlines[2])))
+                            if splitlines[3].find('S') >= 0:
+                                S = S * -1
                             E = decimal_degrees(*dm(float(splitlines[4])))
                             H = decimal_degrees(*dm(float(splitlines[9])))
                             with lock:
