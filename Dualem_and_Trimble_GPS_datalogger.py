@@ -152,16 +152,19 @@ class EMApp(ttk.Frame):
         XLab = ttk.Label(frame2, text="Lng") 
         XLab.grid(row=1, column = 0, pady=5)
         self.X1Val = tk.DoubleVar()
+        self.X1Val.set(0.0)
         XEnt = ttk.Entry(frame2, textvariable=self.X1Val) 
         XEnt.grid(row=1, column = 1, pady=5)
 
         YLab = ttk.Label(frame2, text="Lat") 
         YLab.grid(row=1, column = 2, pady=5)
         self.Y1Val = tk.DoubleVar()
+        self.Y1Val.set(0.0)
         YEnt = ttk.Entry(frame2, textvariable=self.Y1Val) 
         YEnt.grid(row=1, column = 3, pady=5)
 
         self.H1Val = tk.DoubleVar()  # not displayed
+        self.H1Val.set(0.0)
 
         # GPS2
         self.frame2b = ttk.Frame(frame2)
@@ -186,16 +189,19 @@ class EMApp(ttk.Frame):
         XLab = ttk.Label(frame2, text="Lng") 
         XLab.grid(row=3, column = 0, pady=5)
         self.X2Val = tk.DoubleVar()
+        self.X2Val.set(0.0)
         XEnt = ttk.Entry(frame2, textvariable=self.X2Val) 
         XEnt.grid(row=3, column = 1, pady=5)
 
         YLab = ttk.Label(frame2, text="Lat") 
         YLab.grid(row=3, column = 2, pady=5)
         self.Y2Val = tk.DoubleVar()
+        self.Y2Val.set(0.0)
         YEnt = ttk.Entry(frame2, textvariable=self.Y2Val) 
         YEnt.grid(row=3, column = 3, pady=5)
 
         self.H2Val = tk.DoubleVar()  # not displayed
+        self.H2Val.set(0.0)
 
         # EM info
         frame3 = ttk.LabelFrame(self, text="EM")
@@ -628,7 +634,7 @@ class EMApp(ttk.Frame):
                             with lock:
                                 self.X2Val.set(E)
                                 self.Y2Val.set(S)
-                                self.H2Val.set(S)
+                                self.H2Val.set(H)
                                 #print("X= " + str(self.XVal.get()))
                             self.lastGPS2Time = datetime.datetime.now()
                     if s is not None:        
