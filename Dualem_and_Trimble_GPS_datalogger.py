@@ -64,10 +64,10 @@ class EMApp(ttk.Frame):
         self.initUI()
 
         # Setting this flag will stop the reader threads
-        self.stopFlag = False
-        self.restartEMFlag = False
-        self.restartGPS1Flag = False
-        self.restartGPS2Flag = False
+        self.stopFlag = threading.Event()
+        self.restartEMFlag = threading.Event()
+        self.restartGPS1Flag = threading.Event()
+        self.restartGPS2Flag = threading.Event()
 
         self.workers = []
         self.thread1 = threading.Thread(target=self.gps1_read, args=('GPS1',), daemon = True)
@@ -80,9 +80,9 @@ class EMApp(ttk.Frame):
         self.workers.append(self.thread2)
         self.lastGPS2Time = datetime.datetime.now()
 
-        self.thread3 = threading.Thread(target=self.em1_read, args=('EM',), daemon = True)
-        self.thread3.start()
-        self.workers.append(self.thread3)
+        self.EMThread = threading.Thread(target=self.em1_read, args=('EM',), daemon = True)
+        self.EMThread.start()
+        self.workers.append(self.EMThread)
         self.lastEMTime = datetime.datetime.now()
 
         self.numGP1Errors = 0
@@ -322,7 +322,7 @@ class EMApp(ttk.Frame):
         else:
             self.GP1DescLab.configure(text="", style="CommOK.TLabel")
         
-        self.restartGPS1Flag = True
+        self.restartGPS1Flag.set()
         self.lastGPS1Time = datetime.datetime.now() 
         saveConfig()
 
@@ -359,7 +359,7 @@ class EMApp(ttk.Frame):
 #        else:
 #            self.GP2DescLab.configure(text="", style="CommOK.TLabel")
         
-        self.restartGPS2Flag = True
+        self.restartGPS2Flag.set()
         self.lastGPS2Time = datetime.datetime.now() 
         saveConfig()
 
@@ -398,7 +398,7 @@ class EMApp(ttk.Frame):
         else:
             self.EMDescLab.configure(text="", style="CommOK.TLabel")
 
-        self.restartEMFlag = True
+        self.restartEMFlag.set()
         self.lastEMTime = datetime.datetime.now() 
         saveConfig()
 
@@ -478,6 +478,7 @@ class EMApp(ttk.Frame):
             if (datetime.datetime.now() - self.lastEMTime).total_seconds() > 2:
                 if (not self.hasEMError()):
                     self.onEMError("Timeout")
+                    self.restartEMFlag.set()
 
             if (self.hasEMError()):
                 self.numEMErrors += 1
@@ -507,7 +508,7 @@ class EMApp(ttk.Frame):
         self.running = root.after(500, self.doLogging)
 
     def shutDown(self):
-        self.stopFlag = True
+        self.stopFlag.set()
         global root
         root.destroy()
         sys.exit(0)
@@ -523,7 +524,7 @@ class EMApp(ttk.Frame):
     # Write to the continuous output file 
     def doit(self):
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
-        line = time_now +  \
+        line = time_now +  "," + \
             str(self.X1Val.get()) + "," + str(self.Y1Val.get()) + "," + str(self.H1Val.get()) + "," + \
             str(self.X2Val.get()) + "," + str(self.Y2Val.get()) + "," + str(self.H2Val.get()) + \
                 self.getE1() + \
@@ -551,20 +552,20 @@ class EMApp(ttk.Frame):
     # The gps reader thread
     def gps1_read(self, cfgName):
         cfg = config[cfgName]
-        while not self.stopFlag:
+        while not self.stopFlag.is_set():
             if cfg['Port'] == "Undefined":
                self.lastGPS1Time = datetime.datetime.now()
             else:
                 s = None
                 try:
-                    self.restartGPS1Flag = False
+                    self.restartGPS1Flag.clear()
                     self.X1Val.set(0.0)
                     self.Y1Val.set(0.0)
                     self.H1Val.set(0.0)
 
                     s = serial.Serial(cfg['Port'], cfg['Baud'])
                     #s.write(b'%') 
-                    while (not self.stopFlag) & (not self.restartGPS1Flag):
+                    while (not self.stopFlag.is_set() ) & (not self.restartGPS1Flag.is_set()):
                         line = s.readline() 
                         # nonblocking read()? - https://stackoverflow.com/questions/38757906/python-3-non-blocking-read-with-pyserial-cannot-get-pyserials-in-waiting-pro/
                         #print("line = " + line)
@@ -576,7 +577,7 @@ class EMApp(ttk.Frame):
                             if splitlines[3].find('S') >= 0:
                                 S = S * -1
                             E = decimal_degrees(*dm(float(splitlines[4])))
-                            H = decimal_degrees(*dm(float(splitlines[9])))
+                            H = float(splitlines[9])
                             with lock:
                                 self.X1Val.set(E)
                                 self.Y1Val.set(S)
@@ -607,13 +608,13 @@ class EMApp(ttk.Frame):
     # The gps reader thread
     def gps2_read(self, cfgName):
         cfg = config[cfgName]
-        while not self.stopFlag:
+        while not self.stopFlag.is_set():
             if cfg['IPAddr'] == "Undefined":
                self.lastGPS2Time = datetime.datetime.now()
             else:
                 s = None
                 try:
-                    self.restartGPS2Flag = False
+                    self.restartGPS2Flag.clear()
                     self.X2Val.set(0.0)
                     self.Y2Val.set(0.0)
                     self.H2Val.set(0.0)
@@ -621,9 +622,9 @@ class EMApp(ttk.Frame):
                     cfg = config[cfgName]
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.connect((cfg['IPAddr'], int(cfg['IPPort'])))
-                    # s.write(b'%') 
+                    # s.write(b'%\r\n') 
                     #print("opened")
-                    while (not self.stopFlag) & (not self.restartGPS2Flag):
+                    while (not self.stopFlag.is_set()) & (not self.restartGPS2Flag.is_set()):
                         line = self.buffered_readLine(s)
                         # print("line = " + line)
                         linedata = str(line)[1:]
@@ -632,7 +633,7 @@ class EMApp(ttk.Frame):
                         if "GPGGA" in linedata:
                             S = decimal_degrees(*dm(float(splitlines[2])))
                             E = decimal_degrees(*dm(float(splitlines[4])))
-                            H = decimal_degrees(*dm(float(splitlines[9])))
+                            H = float(splitlines[9])
                             with lock:
                                 self.X2Val.set(E)
                                 self.Y2Val.set(S)
@@ -653,11 +654,11 @@ class EMApp(ttk.Frame):
     # The em reader thread
     def em1_read(self, cfgName):
         cfg = config[cfgName]
-        while not self.stopFlag:
+        while not self.stopFlag.is_set():
             if cfg['Port'] == "Undefined":
                self.lastEMTime = datetime.datetime.now()
             else:
-                self.restartEMFlag = False
+                self.restartEMFlag.clear()
                 self.EM_HCP1Val.set(0.0)
                 self.EM_HCPI1Val.set(0.0)
                 self.EM_PRP1Val.set(0.0)
@@ -673,35 +674,41 @@ class EMApp(ttk.Frame):
                 s = None
                 try:
                     self.onEMNoError()
-                    s = serial.Serial(cfg['Port'], cfg['Baud'])
-                    s.write(b'%') 
-                    while (not self.stopFlag) & (not self.restartEMFlag):
-                        line = s.readline()
-                        linedata = (str(line)[2:])
-                        #print("line=" + linedata)
+                    print("Opening " + cfg['Port'] + '\n') 
+                    s = serial.Serial(cfg['Port'], cfg['Baud'], timeout=2, write_timeout=2)
+                    s.write(b'%\r\n') 
+                    line = ''
+                    while (not self.stopFlag.is_set() ) & (not self.restartEMFlag.is_set() ):
+                        while (line.find('\n') < 0 & (not self.restartEMFlag.is_set())):
+                            if (s.in_waiting > 0):
+                                line = line + s.read(s.in_waiting).decode('ascii') 
+                            if (s.in_waiting <= 0):
+                                time.sleep(0.01) 
+                        linedata = line[:line.find('\n')]
+                        line = line[line.find('\n')+1:]
                         splitlines = linedata.split(',')
-                        if "PDLM1" in linedata:
+                        if ("PDLM1" in linedata) and (len(splitlines) >= 5):
                             with lock:
                                 self.EM_HCP1Val.set(splitlines[2])   #HCP conductivity in mS/m
                                 self.EM_HCPI1Val.set(splitlines[3])  #HCP inphase in ppt
                                 self.EM_PRP1Val.set(splitlines[4])   #PRP conductivity in mS/m
                                 self.EM_PRPI1Val.set(splitlines[5].split('*')[0]) #PRP inphase in ppt
                             self.lastEMTime = datetime.datetime.now()
-                        elif "PDLM2" in linedata:
+                        elif ("PDLM2" in linedata) & (len(splitlines) >= 5):
                             with lock:
                                 self.EM_HCP2Val.set(splitlines[2])      #HCP conductivity in mS/m
                                 self.EM_HCPI2Val.set(splitlines[3])     #HCP inphase in ppt
                                 self.EM_PRP2Val.set(splitlines[4])      #PRP conductivity in mS/m
                                 self.EM_PRPI2Val.set(splitlines[5].split('*')[0])      #PRP inphase in ppt
                             self.lastEMTime = datetime.datetime.now()
-                        elif "PDLMH" in linedata:
+                        elif ("PDLMH" in linedata) & (len(splitlines) >= 5):
                             with lock:
                                 self.EM_HCPHVal.set(splitlines[2])      #HCP conductivity in mS/m
                                 self.EM_HCPIHVal.set(splitlines[3])     #HCP inphase in ppt
                                 self.EM_PRPHVal.set(splitlines[4])      #PRP conductivity in mS/m
                                 self.EM_PRPHIVal.set(splitlines[5].split('*')[0])      #PRP inphase in ppt
                             self.lastEMTime = datetime.datetime.now()
-                        elif "PDLMA" in linedata:
+                        elif ("PDLMA" in linedata) & (len(splitlines) >= 4):
                             #print('pdlma: ' + linedata)
                             with lock:
                                 self.EM_VoltsVal.set(float(splitlines[1]))
@@ -709,16 +716,17 @@ class EMApp(ttk.Frame):
                                 self.EM_PitchVal.set(float(splitlines[3]))
                                 self.EM_RollVal.set(float(splitlines[4].split('*')[0]))
                             self.lastEMTime = datetime.datetime.now()
+
                         ROLL = self.EM_RollVal.get()
                         if float(abs(ROLL)) > 20:
                             self.onEMError(' Roll angle: ' + str(ROLL))
 
-                        #print("stop= " + str(self.stopFlag) + "," + "restart= " + str( self.restartEMFlag))
-                        # end while    
+                        #print("stop= " + str(self.stopFlag.is_set()) + "," + "restart= " + str( self.restartEMFlag.is_set()))
+                    # end while    
                 except Exception as e:
                     self.onEMError("Exception opening " + cfg['Port'] )
                     if hasattr(e, 'message'):
-                        print(e.message)
+                        print('msg=' + e.message)
                     else:
                         print(e)
                     pass
