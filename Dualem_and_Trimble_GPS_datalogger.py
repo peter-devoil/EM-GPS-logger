@@ -275,6 +275,8 @@ class EMApp(ttk.Frame):
         D30Ent.grid(row=2, column = 11, pady=5)
 
        # Undisplayed 
+        self.TrackVal= tk.DoubleVar()
+        self.SpeedVal= tk.DoubleVar()
         self.EM_VoltsVal= tk.DoubleVar()
         self.EM_PitchVal= tk.DoubleVar()
         self.EM_RollVal= tk.DoubleVar()
@@ -453,7 +455,7 @@ class EMApp(ttk.Frame):
     def startLogging(self):
         if not os.path.exists(self.saveFile.get()):
             with open(self.saveFile.get(), 'w') as the_file:
-               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude 1,Latitude 1,Elevation 1,Longitude 2,Latitude 2,Elevation 2,EM PRP1,EM PRP2,EM PRPH,EM HCP1,EM HCP2,EM HCPH,EM PRPI1,EM PRPI2,EM PRPIH,EM HCPI1,EM HCPI2,EM HPCIH,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator.get()) + '\n')
+               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude 1,Latitude 1,Elevation 1,Longitude 2,Latitude 2,Elevation 2,Speed 2,Track 2,EM PRP1,EM PRP2,EM PRPH,EM HCP1,EM HCP2,EM HCPH,EM PRPI1,EM PRPI2,EM PRPIH,EM HCPI1,EM HCPI2,EM HPCIH,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator.get()) + '\n')
         self.doLogging()
 
     def pauseLogging(self):
@@ -534,7 +536,8 @@ class EMApp(ttk.Frame):
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
         line = time_now +  "," + \
             str(self.X1Val.get()) + "," + str(self.Y1Val.get()) + "," + str(self.H1Val.get()) + "," + \
-            str(self.X2Val.get()) + "," + str(self.Y2Val.get()) + "," + str(self.H2Val.get()) + \
+            str(self.X2Val.get()) + "," + str(self.Y2Val.get()) + "," + str(self.H2Val.get()) + "," + \
+            str(self.SpeedVal.get()) + "," + str(self.TrackVal.get()) + \
                 self.getE1() + \
                 '\n'
         with open(self.saveFile.get(), 'a') as the_file:
@@ -647,6 +650,14 @@ class EMApp(ttk.Frame):
                                 self.Y2Val.set(S)
                                 self.H2Val.set(H)
                                 #print("X= " + str(self.XVal.get()))
+                            self.lastGPS2Time = datetime.datetime.now()
+                        if "GPVTG" in linedata: # http://aprs.gids.nl/nmea/#vtg
+                            T = float(splitlines[1])
+                            S = float(splitlines[7])
+                            with lock:
+                                self.TrackVal.set(T)
+                                self.SpeedVal.set(S)
+                            print("Track= " + str(T))
                             self.lastGPS2Time = datetime.datetime.now()
                     if s is not None:        
                         s.close()
