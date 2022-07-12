@@ -235,8 +235,8 @@ class EMApp(ttk.Frame):
         self.D025Lab = ttk.Label(frame3, text="025", style="CommOK.TLabel") 
         self.D025Lab.grid(row=2, column = 0, pady=5)
         self.EM_PRPHVal = tk.DoubleVar()
-        self.EM_PRPIHVal = tk.DoubleVar()
-        D025Ent = ttk.Entry(frame3, textvariable=self.EM_PRPHVal, width=8) 
+        self.EM_PRPHIVal = tk.DoubleVar()
+        D025Ent = ttk.Entry(frame3, textvariable=self.EM_PRPHIVal, width=8) 
         D025Ent.grid(row=2, column = 1, pady=5)
         
         self.D05Lab = ttk.Label(frame3, text="05", style="CommOK.TLabel") 
@@ -526,7 +526,7 @@ class EMApp(ttk.Frame):
     def getE1(self):
         return("," + str(self.EM_PRP1Val.get()) + "," + str(self.EM_PRP2Val.get()) + "," + str(self.EM_PRPHVal.get())+ \
                 "," + str(self.EM_HCP1Val.get()) + "," + str(self.EM_HCP2Val.get()) + "," + str(self.EM_HCPHVal.get()) + \
-                "," + str(self.EM_PRPI1Val.get()) + "," + str(self.EM_PRPI2Val.get()) + "," + str(self.EM_PRPIHVal.get()) + \
+                "," + str(self.EM_PRPI1Val.get()) + "," + str(self.EM_PRPI2Val.get()) + "," + str(self.EM_PRPHIVal.get()) + \
                 "," + str(self.EM_HCPI1Val.get()) + "," + str(self.EM_HCPI2Val.get()) + "," + str(self.EM_HCPIHVal.get()) + \
                 "," + str(self.EM_VoltsVal.get()) + "," + str(self.EM_TemperatureVal.get()) + \
                 "," + str(self.EM_PitchVal.get()) + "," + str(self.EM_RollVal.get()))
@@ -637,7 +637,7 @@ class EMApp(ttk.Frame):
                     #print("opened")
                     while (not self.stopFlag.is_set()) & (not self.restartGPS2Flag.is_set()):
                         line = self.buffered_readLine(s)
-                        # print("line = " + line)
+                        #print("line = " + line)
                         linedata = str(line)[1:]
                         splitlines = linedata.split(',')
 
@@ -652,12 +652,16 @@ class EMApp(ttk.Frame):
                                 #print("X= " + str(self.XVal.get()))
                             self.lastGPS2Time = datetime.datetime.now()
                         if "GPVTG" in linedata: # http://aprs.gids.nl/nmea/#vtg
-                            T = float(splitlines[1])
-                            S = float(splitlines[7])
+                            T = 0.0
+                            if splitlines[1] != "":
+                                T = float(splitlines[1])
+                            S = 0.0
+                            if splitlines[7] != "":
+                                S = float(splitlines[7])
                             with lock:
                                 self.TrackVal.set(T)
                                 self.SpeedVal.set(S)
-                            print("Track= " + str(T))
+                            #print("Track= " + str(T))
                             self.lastGPS2Time = datetime.datetime.now()
                     if s is not None:        
                         s.close()
@@ -689,7 +693,7 @@ class EMApp(ttk.Frame):
                 self.EM_HCPHVal.set(0.0)
                 self.EM_HCPIHVal.set(0.0)
                 self.EM_PRPHVal.set(0.0)
-                self.EM_PRPIHVal.set(0.0)
+                self.EM_PRPHIVal.set(0.0)
                 s = None
                 try:
                     self.onEMNoError()
