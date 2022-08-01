@@ -236,7 +236,7 @@ class EMApp(ttk.Frame):
         self.D025Lab.grid(row=2, column = 0, pady=5)
         self.EM_PRPHVal = tk.DoubleVar()
         self.EM_PRPHIVal = tk.DoubleVar()
-        D025Ent = ttk.Entry(frame3, textvariable=self.EM_PRPHIVal, width=8) 
+        D025Ent = ttk.Entry(frame3, textvariable=self.EM_PRPHVal, width=8) 
         D025Ent.grid(row=2, column = 1, pady=5)
         
         self.D05Lab = ttk.Label(frame3, text="05", style="CommOK.TLabel") 
