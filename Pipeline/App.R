@@ -1,6 +1,8 @@
 library(shiny)
 library(dplyr)
 library(leaflet)
+#library(leafpm)
+library(mapedit)
 library(ggplot2)
 library(shinybusy)
 library(sf)
@@ -26,22 +28,26 @@ ui <- fluidPage(
     ),
     tabPanel("Geo Screen",
              fluidRow(
-               column(6, 
-                      fileInput("uploadPlotBoundaries", "Plot boundaries", buttonLabel = "Open"),
-                      numericInput("borderWidth", "Plot Border Width (cm)", value = 20),
-                      wellPanel(style = "height: 70vh;",
-                                leafletOutput("geomap"))
+               column(width=6, 
+                  fluidRow(
+                      column(width=3, 
+                             fileInput("uploadPlotBoundaries", "Plot boundaries", buttonLabel = "Open"),
+                             numericInput("borderWidth", "Plot Border Width (m)", value = 0.2)),
+                      column(width=3, offset = 3, 
+                             numericInput("boomRight", "Boom right offset (m)", value = 2.8),
+                             numericInput("boomTrailing", "Boom trailing offset (m)", value = 1.0))),
+                  wellPanel(style = "height: 60vh;",
+                            leafletOutput("geomap", height="100%"))
                ),
-               column(6, 
+               column(width=6, 
                       wellPanel(style = "overflow-x: scroll;height:80vh;overflow-y: scroll;",
-                                tableOutput("geogrid"))
-               )
+                                tableOutput("geogrid")))
              )
     ),
     tabPanel("Em Screen",
              fluidRow(
                column(6, 
-                      wellPanel(style = "height: 70vh;",
+                      wellPanel(style = "height: 60vh;",
                                 leafletOutput("emmap"))
                ),
                column(6, 
@@ -58,7 +64,7 @@ ui <- fluidPage(
     )
 )
 
-# Read a .csv file
+# Read a .csv file recorded from the buggy
 readRawData <- function(datapath) {
   read.csv(datapath, sep = ",", header=T) %>%
     mutate(DateTime = as.POSIXct(paste(YYYY.MM.DD, HH.MM.SS.F),  
@@ -68,8 +74,58 @@ readRawData <- function(datapath) {
     relocate(DateTime) %>%
     rename_at(vars(ends_with('.2')),  ~ sub("\\.2$", "", .x)) %>%
     select(-c(ends_with('.1'))) %>%
-    mutate(Latitude = ifelse (Latitude < 0, Latitude, Latitude * -1))
+    mutate(Latitude = ifelse (Latitude < 0, Latitude, Latitude * -1)) %>%
+    filter(Latitude != 0, Longitude != 0)
 }
+
+# Statistical mode of a vector
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
+
+# return a lat/long point offset from point
+# bearing in degrees
+# distance in meters
+offset <- function(longitude, latitude, bearing, distance) {
+  R=6378000         # This is in meters
+  
+  #longitude <- st_coordinates(coord)[1]
+  #latitude <-  st_coordinates(coord)[2]
+  brng = bearing * pi / 180 # Bearing is converted to radians.
+  lat1 = latitude * pi / 180 #Current lat point converted to radians
+  lon1 = longitude * pi / 180 #Current long point converted to radians
+  
+  lat2 = asin( sin(lat1) * cos(distance/R) +
+                 cos(lat1) * sin(distance/R) * cos(brng))
+  
+  lon2 = lon1 + atan2(sin(brng)*sin(distance/R)*cos(lat1),
+                      cos(distance/R)-sin(lat1)*sin(lat2))
+  
+  lat2 = lat2 * 180 / pi
+  lon2 = lon2 * 180 / pi
+  return(data.frame(Longitude = lon2, Latitude=lat2))
+}
+
+
+doOffsetting <- function(p, boomRight, boomTrailing) {
+  #1. determine tracklines
+  b1 <- sort(table(cut(p$Track,20)), decreasing = T)  # bins
+  b2 <- names(head(b1,2)) # top two most common as simple numeric numbers
+  splitPoint <- mean(as.numeric(unlist(lapply(strsplit(gsub("\\(|]$", "", b2), ","),first)))) # The midpoint between the humps
+  p$roughTrack <- 5 * round(p$Track / 5, 0)  # bin to 5 degrees
+  B1 <- Mode(p$roughTrack[p$Track < splitPoint]) # most common
+  B2 <- Mode(p$roughTrack[p$Track >= splitPoint])
+  p$roughBearing <- ifelse(p$Track < splitPoint, B1, B2)
+
+  # 2.   
+  t1 <- offset(p$Longitude, p$Latitude, p$roughBearing, - boomTrailing)  
+  t2 <- offset(t1$Longitude, t1$Latitude, p$roughBearing + 90, boomRight)  
+  p$Longitude <- t2$Longitude
+  p$Latitude <- t2$Latitude
+  return(p)
+}
+
 
 server <- function(input, output, session) {
   data <- reactive({
@@ -79,7 +135,7 @@ server <- function(input, output, session) {
     readRawData(input$upload$datapath)
   })
   
-  plotBoundaries <- reactive({
+  getPlotBoundaries <- reactive({
     req(input$uploadPlotBoundaries)
     ext <- tools::file_ext(input$uploadPlotBoundaries$name)
     result <- NULL
@@ -94,34 +150,6 @@ server <- function(input, output, session) {
     result
   })
   
-  # path<-"/home/uqpdevo1/Downloads/Layout Wheat Trial 2024 Gatton.kmz"
-  # path<-"/home/uqpdevo1/New_Shapefile(4).shp"
-  # ext <- tools::file_ext(path)
-  # result<- NULL
-  # if (tolower(ext) == "shp") {result <- st_read(path ) } 
-  # 
-  # if (tolower(ext) == "kml") {result <- st_read(path) } 
-  # if (tolower(ext) == "kmz") {
-  #   kmlFile <- file.path(dirname(path), "doc.kml")
-  #   system2("unzip", args=c("-p", shQuote(path), "doc.kml"), stdout=kmlFile)
-  ##   result <- st_zm(st_read(kmlFile))
-  # }
-  # boundaries <- result
-  # bbox <- as.numeric(st_bbox(boundaries))
-
-  # data <- readRawData("/home/uqpdevo1/Downloads/WheatGatton2024.D1.10062024.csv")   
-  # points <-  st_as_sf(data, coords = c("Longitude", "Latitude"), 
-#                               crs = st_crs(boundaries), agr="constant")
-   
-  # leaflet(options = leafletOptions(preferCanvas = TRUE)) %>%
-  #   setView(lat = (bbox[2] + bbox[4]) /2, lng = (bbox[1] + bbox[3]) /2, zoom = 14) %>%
-  #   addTiles(group = "OSM (default)",
-  #            options = providerTileOptions(noWrap = TRUE, minzoom=10, maxZoom=20, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
-  #   addProviderTiles(providers$Esri.WorldImagery,
-  #                    options = providerTileOptions(noWrap = TRUE, minzoom=10, maxZoom=20, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
-  #   addPolygons(data = boundaries,fill = NA, weight = 1, color = "red") %>%
-  #   addMarkers(data = points)    
-   
   geoScreenedData<- reactive({
     data()
   })
@@ -135,15 +163,17 @@ server <- function(input, output, session) {
   })
 
   geoBoundaries<- reactive( {
-    plotBoundaries()
+    getPlotBoundaries()
   })
   
   geoPoints<- reactive( {
     req(input$borderWidth)
-    b <- plotBoundaries()
-    p <- st_as_sf(data(), coords = c("Longitude", "Latitude"), 
-                  crs = st_crs(b))
-    
+    b <- getPlotBoundaries()
+    p <- data()
+
+    if (TRUE) { # (input$doBoomOffset) 
+      p <- doOffsetting(p, input$boomRight, input$boomTrailing)
+    }
     return(p)
     #getActive(, input$borderWidth) 
   })
@@ -168,17 +198,42 @@ server <- function(input, output, session) {
   })
   
   output$geomap <- renderLeaflet({
-    boundaries <- geoBoundaries()
-    bbox <- as.numeric(st_bbox(boundaries))
     leaflet(options = leafletOptions(preferCanvas = TRUE)) %>%
-      setView(lat = (bbox[2] + bbox[4]) /2, lng = (bbox[1] + bbox[3]) /2, zoom = 14) %>%
+      setView(lat = -26, lng = 135, zoom = 4) %>%
       addTiles(group = "OSM (default)",
-               options = providerTileOptions(noWrap = TRUE, minzoom=10, maxZoom=20, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
+               options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
       addProviderTiles(providers$Esri.WorldImagery,
-                       options = providerTileOptions(noWrap = TRUE, minzoom=10, maxZoom=20, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
-      addPolygons(data = boundaries,fill = NA, weight = 1, color = "red") %>%
-      addCircleMarkers(data = geoPoints(), weight=1, stroke=FALSE, opacity=1.0, fillColor = "green")
+                       options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) 
+
   })
+  
+  observe({
+    plotBoundaries <<- geoBoundaries()
+    bbox <- as.numeric(st_bbox(plotBoundaries))
+    leafletProxy("geomap") %>%
+      clearGroup("boundaries") %>%
+      setView(lat = (bbox[2] + bbox[4]) /2, lng = (bbox[1] + bbox[3]) /2, zoom = 16)  %>%
+      addPolygons(data = plotBoundaries, group = "boundaries", fill = NA, weight = 1, color = "red") 
+  })  
+  
+  observe({
+    p <- geoPoints()
+    if (all(!is.na(p$Longitude) & !is.na(p$Latitude))) {
+      plotPoints <<- st_as_sf(p, coords = c("Longitude", "Latitude"), 
+                            crs = "WGS84") #st_crs(boundaries))
+      leafletProxy("geomap") %>%
+        clearGroup("points") %>%
+        addCircleMarkers(data = plotPoints, group = "points", radius=2, stroke=FALSE, fillOpacity=1.0, fillColor = "green") %>%
+        addPmToolbar(targetGroup = "points")
+      # fixme add selected / not selected colours
+    }
+  })
+  
+  #https://stackoverflow.com/questions/33460597/get-all-layerids-or-groups-from-leaflet
+  #getLayerIds <- function(m) {
+  # l <- lapply(lapply(m$x$calls, function(x) x[[2]]), function(x) x[4][[1]])
+  # layerIds <- unlist(l[sapply(l, function(x) {class(x) != "list" & !is.null(x)})])
+  #}
 
   output$emmap <- renderLeaflet({
     leaflet() %>%
