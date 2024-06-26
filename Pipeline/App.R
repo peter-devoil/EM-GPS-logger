@@ -1,7 +1,6 @@
 library(shiny)
 library(dplyr)
 library(leaflet)
-#library(leafpm)
 library(mapedit)
 library(ggplot2)
 library(shinybusy)
@@ -203,8 +202,8 @@ server <- function(input, output, session) {
       addTiles(group = "OSM (default)",
                options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
       addProviderTiles(providers$Esri.WorldImagery,
-                       options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) 
-
+                       options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) #%>%
+      #addPmToolbar(targetGroup = "points", drawOptions =  pmDrawOptions())
   })
   
   observe({
@@ -223,26 +222,44 @@ server <- function(input, output, session) {
                             crs = "WGS84") #st_crs(boundaries))
       leafletProxy("geomap") %>%
         clearGroup("points") %>%
-        addCircleMarkers(data = plotPoints, group = "points", radius=2, stroke=FALSE, fillOpacity=1.0, fillColor = "green") %>%
-        addPmToolbar(targetGroup = "points")
+        addCircleMarkers(data = plotPoints, group = "points", 
+                         layerId =  paste0("point", 1:nrow(plotPoints)),
+                         radius=4, stroke=FALSE, fillOpacity=1.0, fillColor = "green") 
       # fixme add selected / not selected colours
     }
   })
   
-  #https://stackoverflow.com/questions/33460597/get-all-layerids-or-groups-from-leaflet
-  #getLayerIds <- function(m) {
-  # l <- lapply(lapply(m$x$calls, function(x) x[[2]]), function(x) x[4][[1]])
-  # layerIds <- unlist(l[sapply(l, function(x) {class(x) != "list" & !is.null(x)})])
-  #}
-
   output$emmap <- renderLeaflet({
-    leaflet() %>%
+    leaflet(options = leafletOptions(preferCanvas = TRUE)) %>%
       setView(lat = -26, lng = 135, zoom = 4) %>%
-      addTiles(group = "OSM (default)") %>%
+      addTiles(group = "OSM (default)",
+               options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
       addProviderTiles(providers$Esri.WorldImagery,
-                       options = providerTileOptions(noWrap = TRUE)) %>%
-    addPolygons(data = geoBoundaries()) #%>%
-    #addMarkers(data = geopoints())    
+                       options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) #%>%
+    #addPmToolbar(targetGroup = "points", drawOptions =  pmDrawOptions())
+  })
+  
+  observe({
+    plotBoundaries <<- geoBoundaries()
+    bbox <- as.numeric(st_bbox(plotBoundaries))
+    leafletProxy("emmap") %>%
+      clearGroup("boundaries") %>%
+      setView(lat = (bbox[2] + bbox[4]) /2, lng = (bbox[1] + bbox[3]) /2, zoom = 16)  %>%
+      addPolygons(data = plotBoundaries, group = "boundaries", fill = NA, weight = 1, color = "red") 
+  })  
+  
+  observe({
+    p <- geoPoints()
+    if (all(!is.na(p$Longitude) & !is.na(p$Latitude))) {
+      plotPoints <<- st_as_sf(p, coords = c("Longitude", "Latitude"), 
+                              crs = "WGS84") #st_crs(boundaries))
+      leafletProxy("emmap") %>%
+        clearGroup("points") %>%
+        addCircleMarkers(data = plotPoints, group = "points", 
+                         layerId =  paste0("point", 1:nrow(plotPoints)),
+                         radius=4, stroke=FALSE, fillOpacity=1.0, fillColor = "green") 
+      # fixme add selected / not selected colours
+    }
   })
   
   output$emHist <- renderPlot({
