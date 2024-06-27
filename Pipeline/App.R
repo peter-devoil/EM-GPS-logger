@@ -1,66 +1,71 @@
 library(shiny)
+library(bslib)
+#library(DT)
+library(rhandsontable)
 library(dplyr)
 library(leaflet)
+library(leaflet.extras)
 library(mapedit)
 library(ggplot2)
 library(shinybusy)
 library(sf)
 
-ui <- fluidPage(
+ui <- page_sidebar(
+  title ="EM Screening",
   #add_busy_spinner(spin = "fading-circle", position="full-page"),
-  tabsetPanel(
-    tabPanel("Data", 
-             fluidRow(
-               column(6, 
-                      fileInput("upload", "Data", buttonLabel = "Open"),
-                      wellPanel(style = "overflow-x: scroll;height:80vh;overflow-y: scroll;",
-                                tableOutput("preview"))
-                      # fixme - table needs to editable to remove rows
-               ),
-               column(6, 
-                      downloadButton("downloadData", "Download"),
-                      br(),
-                      radioButtons("downloadType", "Aggregation", 
-                                   c("None", "Plot Average", "Centroid"))
-               )
-             )
+  sidebar = sidebar(
+    fileInput("upload", "EM Data", buttonLabel = "Open"),
+    fileInput("uploadPlotBoundaries", "Plot boundaries", buttonLabel = "Open"),
+    numericInput("borderWidth", "Plot Border Width (m)", value = 0.2),
+    numericInput("boomRight", "Boom right offset (m)", value = 2.8),
+    numericInput("boomTrailing", "Boom trailing offset (m)", value = 1.0),
+    br(),
+    downloadButton("downloadData", "Download"),
+    radioButtons("downloadType", "Aggregation", 
+                 c("None", "Plot Average", "Centroid"))
+  ),
+  fluidRow(
+    column(width=6, 
+           wellPanel(style = "height: 60vh;",
+                     leafletOutput("geomap", height="100%")),
+           br(),
+           fluidRow(column(6, align = "center", offset=3,
+           actionButton("move", label = tags$span(
+             "", tags$i(
+               class = "fa fa-right-left",
+               title = "Move selected"
+             ))),
+           actionButton("accept", label = tags$span(
+             "", tags$i(
+               class = "fa fa-check",
+               title = "Use selected"
+             ))),
+           actionButton("reject", label = tags$span(
+             "", tags$i(
+               class = "fa fa-xmark",
+               title = "Discard selected"
+             )))
+           ))
     ),
-    tabPanel("Geo Screen",
-             fluidRow(
-               column(width=6, 
-                  fluidRow(
-                      column(width=3, 
-                             fileInput("uploadPlotBoundaries", "Plot boundaries", buttonLabel = "Open"),
-                             numericInput("borderWidth", "Plot Border Width (m)", value = 0.2)),
-                      column(width=3, offset = 3, 
-                             numericInput("boomRight", "Boom right offset (m)", value = 2.8),
-                             numericInput("boomTrailing", "Boom trailing offset (m)", value = 1.0))),
-                  wellPanel(style = "height: 60vh;",
-                            leafletOutput("geomap", height="100%"))
-               ),
-               column(width=6, 
-                      wellPanel(style = "overflow-x: scroll;height:80vh;overflow-y: scroll;",
-                                tableOutput("geogrid")))
-             )
-    ),
-    tabPanel("Em Screen",
-             fluidRow(
-               column(6, 
-                      wellPanel(style = "height: 60vh;",
-                                leafletOutput("emmap"))
-               ),
-               column(6, 
-                      selectInput("emWhat", label = "Channel", 
-                                  choices = c("PRP1","PRP2","PRPH","HCP1","HCP2","HCPH","PRPI1","PRPI2","PRPIH"),
-                                  selected="PRP1"),
-                      br(),
-                      plotOutput("emHist", height = "30vh", width = 500),
-                      br(),
-                      plotOutput("emBox", height = "30vh", width = 300)
-               )
+    column(width=6, 
+           navset_pill(
+             nav_panel(title="Geo Screen",
+                       wellPanel(style = "overflow-x: scroll;height:80vh;overflow-y: scroll;",
+                                 #DT::dataTableOutput("geogrid"))
+                                 rHandsontableOutput("geogrid"))
+             ),
+             nav_panel(title="EM Screen",
+                       selectInput("emWhat", label = "Channel", 
+                                   choices = c("PRP1","PRP2","PRPH","HCP1","HCP2","HCPH","PRPI1","PRPI2","PRPIH"),
+                                   selected="PRP1"),
+                       br(),
+                       plotOutput("emHist", height = "30vh", width = 500),
+                       br(),
+                       plotOutput("emBox", height = "30vh", width = 300)
              )
            )
     )
+  )
 )
 
 # Read a .csv file recorded from the buggy
@@ -127,10 +132,13 @@ doOffsetting <- function(p, boomRight, boomTrailing) {
 
 
 server <- function(input, output, session) {
+  markedIDs <- reactiveValues(screenedIDs = {}, selectedIDs = {})
+
   data <- reactive({
     req(input$upload)
     ext <- tools::file_ext(input$upload$name)
     if (ext != "csv") { validate("Invalid file; Please upload a .csv file") }
+    cat("data() called\n")
     readRawData(input$upload$datapath)
   })
   
@@ -149,51 +157,41 @@ server <- function(input, output, session) {
     result
   })
   
-  geoScreenedData<- reactive({
-    data()
-  })
-  
-  emScreenedData<- reactive({
-    geoScreenedData()
-  })
-  
-  downloadData<- reactive({
-    emScreenedData()
-  })
-
-  geoBoundaries<- reactive( {
-    getPlotBoundaries()
-  })
-  
   geoPoints<- reactive( {
-    req(input$borderWidth)
-    b <- getPlotBoundaries()
+    #req(markedIDs$selected, markedIDs$screened, input$boomRight, input$boomTrailing)
+    #b <- getPlotBoundaries()
     p <- data()
-
-    if (TRUE) { # (input$doBoomOffset) 
-      p <- doOffsetting(p, input$boomRight, input$boomTrailing)
+    # fixme - what to do with input$borderWidth?
+    if (TRUE) {
+       p <- doOffsetting(p, input$boomRight, input$boomTrailing)
     }
-    return(p)
-    #getActive(, input$borderWidth) 
+    
+    return(st_as_sf(p, coords = c("Longitude", "Latitude"), crs = "WGS84") %>%
+           mutate(id = paste0("point", row_number()))
+    )
   })
   
-  # show preview of raw data
-  output$preview <- renderTable({
-    data() %>% mutate(DateTime = format.POSIXct(DateTime, format="%d/%m/%Y %H:%M.%S"))
-  })
-   
    # Downloadable csv of selected dataset ----
    output$downloadData <- downloadHandler(
      filename = function() {
        paste(input$upload$name, ".Screened.csv", sep = "")
      },
      content = function(file) {
-       write.csv(downloadData(), file, row.names = FALSE)
+       screenedData <- data() %>% filter(!row_number() %in% markedIDs$screened)
+       write.csv(screenedData, file, row.names = FALSE)
      }
    )
+  output$geogrid <- renderRHandsontable({ 
+    df <- data() %>%
+      mutate(DateTime = format.POSIXct(DateTime, format="%d/%m/%Y %H:%M:%S"),
+             screened = row_number() %in% markedIDs$screened)
+    rhandsontable(df, useTypes = T) 
+  })
   
-  output$geogrid <- renderTable({
-    geoScreenedData() %>% mutate(DateTime = format.POSIXct(DateTime, format="%d/%m/%Y %H:%M:%S"))
+  output$geogridOLD <- renderDataTable({
+    data() %>%
+      mutate(DateTime = format.POSIXct(DateTime, format="%d/%m/%Y %H:%M:%S"),
+             screened = row_number() %in% markedIDs$screened)
   })
   
   output$geomap <- renderLeaflet({
@@ -202,12 +200,14 @@ server <- function(input, output, session) {
       addTiles(group = "OSM (default)",
                options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
       addProviderTiles(providers$Esri.WorldImagery,
-                       options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) #%>%
-      #addPmToolbar(targetGroup = "points", drawOptions =  pmDrawOptions())
+                       options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
+      addDrawToolbar(polylineOptions = F, circleOptions = F, markerOptions = F,
+                     circleMarkerOptions = F, polygonOptions = F, 
+                     rectangleOptions = drawRectangleOptions(), targetGroup='selection-marker')
   })
   
   observe({
-    plotBoundaries <<- geoBoundaries()
+    plotBoundaries <- getPlotBoundaries()
     bbox <- as.numeric(st_bbox(plotBoundaries))
     leafletProxy("geomap") %>%
       clearGroup("boundaries") %>%
@@ -216,76 +216,95 @@ server <- function(input, output, session) {
   })  
   
   observe({
-    p <- geoPoints()
-    if (all(!is.na(p$Longitude) & !is.na(p$Latitude))) {
-      plotPoints <<- st_as_sf(p, coords = c("Longitude", "Latitude"), 
-                            crs = "WGS84") #st_crs(boundaries))
-      leafletProxy("geomap") %>%
+    plotPoints <- geoPoints() 
+    bbox <- as.numeric(st_bbox(plotPoints))
+    # fixme test if new data was loaded, if so then reset view    
+    activePoints <- plotPoints %>% filter(!row_number() %in% markedIDs$screened)
+    deletedPoints <- plotPoints %>% filter(row_number() %in% markedIDs$screened)
+    selectedPoints <- plotPoints %>% filter(row_number() %in% markedIDs$selected)
+    leafletProxy("geomap") %>%
         clearGroup("points") %>%
-        addCircleMarkers(data = plotPoints, group = "points", 
-                         layerId =  paste0("point", 1:nrow(plotPoints)),
-                         radius=4, stroke=FALSE, fillOpacity=1.0, fillColor = "green") 
-      # fixme add selected / not selected colours
+        addCircleMarkers(data = deletedPoints, group = "points", 
+                         layerId =  deletedPoints$id,
+                         radius=4, stroke=FALSE, fillOpacity=1.0, fillColor = "grey") %>%
+        addCircleMarkers(data = activePoints, group = "points", 
+                         layerId =  activePoints$id,
+                         radius=4, stroke=FALSE, fillOpacity=1.0, fillColor = "green") %>%
+        addCircleMarkers(data = selectedPoints, group = "points", 
+                         layerId =  selectedPoints$id,
+                         radius=4, stroke=FALSE, fillOpacity=1.0, fillColor = "red")
+  })
+  
+  observeEvent(input$geomap_draw_new_feature, {
+    feat <- input$geomap_draw_new_feature
+    coords <- matrix(unlist(feat$geometry$coordinates), ncol = 2, byrow = T)
+    selBox <- st_sf(st_sfc(st_polygon(list(coords))), crs = "WGS84")
+
+    selPoints <-  st_filter(plotPoints %>% mutate(selected = row_number()),
+                            selBox)
+    
+    markedIDs$selected <- selPoints$selected
+    
+    leafletProxy("geomap") %>% clearGroup("selection-marker")  # fixme this isnt working
+    
+  })
+
+  findIdNear <- function (point, distance) {
+    return(which(as.vector(st_distance(plotPoints, point)) < distance))
+  }
+  
+  observeEvent(input$geomap_click, {
+    p <- st_as_sf(data.frame(lng = input$geomap_click$lng, lat = input$geomap_click$lat), 
+                  coords=c("lng", "lat"), crs = "WGS84")
+    ids <- findIdNear(p, 2) # fixme - should be pixel based wand here, not m
+    markedIDs$selected <- unique(c(markedIDs$selected, ids))
+    first(markedIDs$selected)
+  })
+  
+  observeEvent(input$geomap_shape_click, { 
+    p <- input$geomap_shape_click
+    #cat("SHAPE\n"); print(p)
+  })
+  observeEvent(input$move, {})
+  observeEvent(input$accept, {
+    if (length(markedIDs$selected) > 0) {
+      markedIDs$screened <- markedIDs$screened[! markedIDs$screened %in% markedIDs$selected]
     }
+    markedIDs$selected <- {}
   })
-  
-  output$emmap <- renderLeaflet({
-    leaflet(options = leafletOptions(preferCanvas = TRUE)) %>%
-      setView(lat = -26, lng = 135, zoom = 4) %>%
-      addTiles(group = "OSM (default)",
-               options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) %>%
-      addProviderTiles(providers$Esri.WorldImagery,
-                       options = providerTileOptions(noWrap = TRUE, minzoom=4, maxZoom=24, updateWhenZooming = FALSE, updateWhenIdle = TRUE)) #%>%
-    #addPmToolbar(targetGroup = "points", drawOptions =  pmDrawOptions())
-  })
-  
-  observe({
-    plotBoundaries <<- geoBoundaries()
-    bbox <- as.numeric(st_bbox(plotBoundaries))
-    leafletProxy("emmap") %>%
-      clearGroup("boundaries") %>%
-      setView(lat = (bbox[2] + bbox[4]) /2, lng = (bbox[1] + bbox[3]) /2, zoom = 16)  %>%
-      addPolygons(data = plotBoundaries, group = "boundaries", fill = NA, weight = 1, color = "red") 
-  })  
-  
-  observe({
-    p <- geoPoints()
-    if (all(!is.na(p$Longitude) & !is.na(p$Latitude))) {
-      plotPoints <<- st_as_sf(p, coords = c("Longitude", "Latitude"), 
-                              crs = "WGS84") #st_crs(boundaries))
-      leafletProxy("emmap") %>%
-        clearGroup("points") %>%
-        addCircleMarkers(data = plotPoints, group = "points", 
-                         layerId =  paste0("point", 1:nrow(plotPoints)),
-                         radius=4, stroke=FALSE, fillOpacity=1.0, fillColor = "green") 
-      # fixme add selected / not selected colours
+  observeEvent(input$reject, {
+    if (length(markedIDs$selected) > 0) {
+      markedIDs$screened <- unique(c(markedIDs$screened, markedIDs$selected))
     }
+    markedIDs$selected <- {}
   })
   
+    
   output$emHist <- renderPlot({
-    data <- emScreenedData()
-    if (!is.null(data)) {
+    myData <- data() %>% filter(!row_number() %in% markedIDs$screened)
+    screenedData <- data() %>% filter(row_number() %in% markedIDs$screened)
+    if (!is.null(myData)) {
       return(
-        ggplot( data ) + 
-          geom_histogram(aes(x = .data[[input$emWhat]] ))
+        ggplot( myData ) + 
+          geom_histogram(aes(x = .data[[input$emWhat]] ), bins=50)+ 
+          geom_point(data=screenedData, aes(x = .data[[input$emWhat]]), y = 0,colour="brown")
+        # fixme - should display selected as red, screened out as grey,
+        #         calcultations should be on non-screeened data
       )
     }
   })
 
   output$emBox <- renderPlot({
-    data <- emScreenedData()
-    if (!is.null(data)) {
+    myData <- data() %>% filter(!row_number() %in% markedIDs$screened)
+    screenedData <- data() %>% filter(row_number() %in% markedIDs$screened)
+    if (!is.null(myData)) {
       return(
-        ggplot(data) + 
-          geom_boxplot(aes(y = .data[[input$emWhat]] ))
+        ggplot(myData) + 
+          geom_boxplot(aes(y = .data[[input$emWhat]] )) + 
+          geom_point(data=screenedData, aes(y = .data[[input$emWhat]], x=0), colour="brown")
       )
     }
   })
-  
-  #observe({
-  #  input$reset_button
-  #  leafletProxy("geomap") %>% setView(lat = initial_lat, lng = initial_lng, zoom = initial_zoom)
-  #})
 }
 
 shinyApp(ui, server)
