@@ -3,34 +3,35 @@ import socket
 from serial.tools import list_ports
 import os
 import sys
-#import pygarmin  # https://github.com/quentinsf/pygarmin/
-#import pynmea2 # https://fishandwhistle.net/post/2016/using-pyserial-pynmea2-and-raspberry-pi-to-log-nmea-output/
+import subprocess
 import time
 import threading
 import datetime
 import getpass
 import configparser
 
-from tendo import singleton
+
+#from tendo import singleton
 
 import tkinter as tk
 from tkinter import ttk
 
 # 
-me = singleton.SingleInstance()
+#me = singleton.SingleInstance()
 
 # Use Windows Device Manager to find ports on each system
 config = configparser.ConfigParser()
-if not os.path.exists('Dualem_and_GPS_data_log.ini'):
-    config['GPS1'] = {'Port': 'Undefined', 'Baud': 4800} # COM8
-    config['GPS2'] = {'IPAddr': 'Undefined', 'IPPort': 5718} # COM8
-    config['EM'] = {'Port': 'Undefined', 'Baud': 38400} # COM4
+if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
+    #config['GPS1'] = {'Mode': 'Undefined', 'Address': '10.0.0.1:5017'}
+    config['GPS1'] = {'Mode': 'Bluetooth', 'Address' : 'Sparkfun Facet'}
+    config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0'}
+    #config['EM'] = {'Mode': 'Undefined', 'Port': 'Undefined', 'Baud': 38400} # COM4
     config['Operator'] = {'Name' : getpass.getuser()}
 else:
-    config.read('Dualem_and_GPS_data_log.ini')
+    config.read('Dualem_and_GPS_datalogger.ini')
 
 def saveConfig ():
-    with open('Dualem_and_GPS_data_log.ini', 'w') as configfile:
+    with open('Dualem_and_GPS_datalogger.ini', 'w') as configfile:
         config.write(configfile)
 
 lock = threading.Lock()
@@ -44,18 +45,75 @@ def decimal_degrees(degrees, minutes):
     return degrees + minutes/60 
 
 comPortDescriptions = {}
+BTPortDescriptions = {}
 
-def getComPorts():
+def checkComPorts():
     comPortDescriptions.clear()
+    comPortDescriptions['Undefined'] = "Undefined"
+    try:
+       for port in list_ports.comports():
+           comPortDescriptions[port.device] = port.description
+    except:
+        #print("Exception finding com ports")
+        pass
+    #comPortDescriptions['COM1'] = "Sample com 1 L57"
+    #comPortDescriptions['COM6'] = "Sample com 6 L58"
 
-    result = ['Undefined','test']
-    for port in list_ports.comports():
-        result.append(port.device)
-        comPortDescriptions[port.device] = port.description
+def checkBTPorts():
+    BTPortDescriptions.clear()
+    BTPortDescriptions["Undefined"] = "Undefined"
 
-    return(result)        
+# fixme may need Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+
+    args = ["powershell.exe",  "-ExecutionPolicy", "RemoteSigned", "-Command", r"-"]
+    process = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
+    process.stdin.write(b"$bluetoothDevices = Get-WmiObject -Query \"SELECT * FROM Win32_PnPEntity WHERE PNPClass = 'Bluetooth'\" | Select-Object Name,HardwareID\r\n")
+    process.stdin.write(b"foreach ($device in $bluetoothDevices) {  Write-Host \"$($device.Name),$($device.HardwareID)\" }\r\n")
+
+    output = process.communicate()[0].decode("utf-8").split("\n")
+    #print(output)
+    for line in output:
+        try:
+            splitLn = line.split(",")
+            name = splitLn[0]
+            addr = splitLn[1]
+            if (addr.startswith("BTHENUM\\Dev_")):
+                addr = addr[12:]
+                s = addr[0:2] + ":" + addr[2:4] + ":" + addr[4:6] + ":" + \
+                          addr[6:8] + ":" + addr[8:10] + ":" + addr[10:12] 
+                BTPortDescriptions[s] = name
+        except:
+            pass
+    
+    #BTPortDescriptions['b8:d6:1a:0d:9a:22'] = "Sparkfun Facet"
+    BTPortDescriptions['dd:ee:ff:aa:bb:cc'] = "Sample BT 1 (garbage)"
 
 
+def getAddresses( currentMode ):
+    if (currentMode == "IP"):
+        return(getIPAddresses())
+    if (currentMode == "Serial"):
+        return(getSerialAddresses())
+    if (currentMode == "Bluetooth"):
+        return(getBTAddresses())
+    return([])
+
+def getBTAddresses():
+    result = []
+    for addr, name in BTPortDescriptions.items():
+        result.append(name)
+        
+    return(result)
+
+def getSerialAddresses():
+    result = []
+    for addr, name in comPortDescriptions.items():
+        result.append(addr)
+
+    return(result)
+
+def getIPAddresses():
+    return ['10.0.0.1:5017'] # fixme need to store each in .ini file
 ################## Initialisation here ##################
 
 class EMApp(ttk.Frame):
@@ -67,7 +125,6 @@ class EMApp(ttk.Frame):
         self.stopFlag = threading.Event()
         self.restartEMFlag = threading.Event()
         self.restartGPS1Flag = threading.Event()
-        self.restartGPS2Flag = threading.Event()
 
         self.workers = []
         self.thread1 = threading.Thread(target=self.gps1_read, args=('GPS1',), daemon = True)
@@ -75,19 +132,23 @@ class EMApp(ttk.Frame):
         self.workers.append(self.thread1)
         self.lastGPS1Time = datetime.datetime.now()
 
-        self.thread2 = threading.Thread(target=self.gps2_read, args=('GPS2',), daemon = True)
-        self.thread2.start()
-        self.workers.append(self.thread2)
-        self.lastGPS2Time = datetime.datetime.now()
-
         self.EMThread = threading.Thread(target=self.em1_read, args=('EM',), daemon = True)
         self.EMThread.start()
         self.workers.append(self.EMThread)
         self.lastEMTime = datetime.datetime.now()
 
-        self.numGP1Errors = 0
-        self.numGP2Errors = 0
+        self.numGPSErrors = 0
         self.numEMErrors = 0
+        self.lastBellTime = datetime.datetime.now() #- datetime.timedelta(seconds=10)
+    
+    def IPHostCallback (self, variable):
+        if ":" in config['GPS1']["Address"]:
+            config['GPS1']["Address"] = variable.get() + ":" + config['GPS1']["Address"].split(":")[1]
+        else:
+            config['GPS1']["Address"] = variable.get()
+
+    def IPPortCallback (self, variable):
+        config['GPS1']["Address"] = config['GPS1']["Address"].split(":")[0] + ":" + variable.get()
 
     # Build the UI
     def initUI(self):
@@ -108,15 +169,16 @@ class EMApp(ttk.Frame):
         frame1.grid(row=0, column = 0, columnspan=4, sticky=tk.W+tk.E)
 
         # Default filenames
+        today = datetime.datetime.now().strftime("%d-%m-%Y")
         self.saveFile = tk.StringVar()
-        self.saveFile.set(os.getcwd() + '/' + "Em38.All.PW.ISW.csv")
+        self.saveFile.set(os.getcwd() + '/' + "EmXX.All." + today + ".csv")
         sfLab = ttk.Label(frame1, text="All Data") 
         sfLab.grid(row=0, column = 0, sticky=tk.E, pady=5)
         saveFileEnt = ttk.Entry(frame1, textvariable=self.saveFile, width=80) 
         saveFileEnt.grid(row=0, column = 1, columnspan=2, sticky=tk.W, pady=5)
 
         self.savePlotFile = tk.StringVar()
-        self.savePlotFile.set(os.getcwd() + '/' + "Em38.Plot.PW.ISW.csv")
+        self.savePlotFile.set(os.getcwd() + '/' + "EmXX.Plot." + today + ".csv")
         spfLab = ttk.Label(frame1, text="Plot Data") 
         spfLab.grid(row=1, column = 0, sticky=tk.E, pady=5)
         savePlotFileEnt = ttk.Entry(frame1, textvariable=self.savePlotFile, width=80) 
@@ -130,106 +192,97 @@ class EMApp(ttk.Frame):
         self.operEnt.grid(row=2, column = 1, sticky=tk.W, pady=5)
 
         # Lats & longs
-        frame2 = ttk.LabelFrame(self, text="Position")
+        frame2 = ttk.LabelFrame(self, text="Global Positioning System")
         frame2.grid(row=1, column = 0, columnspan=2, sticky=tk.W+tk.E+tk.N)
 
-        # GPS1
-        self.frame2a = ttk.Frame(frame2, style="CommOK.TFrame")
-        self.frame2a.grid(row=0, column = 0, columnspan=4, pady=5, sticky=tk.W+tk.E)
-        self.GP1Lab = ttk.Label(self.frame2a, text="Port 1", style="CommOK.TLabel") 
-        self.GP1Lab.grid(row=0, column = 0, padx=5)
-        self.GP1LstBx = ttk.Combobox(self.frame2a, values=getComPorts(), width=15, style="CommOK.TCombobox")
-        self.GP1LstBx.set(config['GPS1']['Port'])
+        # GPS
+        self.frame2b = ttk.Frame(frame2, style="CommOK.TFrame")
+        self.frame2b.grid(row=1, column = 0, columnspan=5, pady=6, sticky=tk.W+tk.E)
 
-        self.GP1LstBx.bind('<<ComboboxSelected>>', self.onSelectGP1)
-        self.GP1LstBx.grid(row=0, column = 1, padx=5)
-        self.GP1DescLab = ttk.Label(self.frame2a, text="", style="CommOK.TLabel") 
-        desc = comPortDescriptions.get(config['GPS1']['Port'], 0)
-        if desc:
-            self.GP1DescLab.configure(text=desc)
-        self.GP1DescLab.grid(row=0, column = 2, columnspan=2, padx=5, sticky=tk.W+tk.E)
+        self.GPSModeLab = ttk.Label(self.frame2b, text="Mode", style="CommOK.TLabel") 
+        self.GPSModeBx = ttk.Combobox(self.frame2b, values=['Undefined', 'IP', 'Bluetooth', 'Serial'], width=15, style="CommOK.TCombobox")
+        self.GPSModeBx.set(config['GPS1']['Mode'])
+        self.GPSModeBx.bind('<<ComboboxSelected>>', self.onSelectModeGPS)
+        self.GPSModeDesc = ttk.Label(self.frame2b, text="", style="CommOK.TLabel") 
+        self.GPSMsgLab = ttk.Label(self.frame2b, text="", style="CommOK.TLabel") 
+
+        self.IPAddress = tk.StringVar()
+
+        self.IPAddress.set(config['GPS1']['Address'].split(":")[0])
+        self.IPAddress.trace_add("write", lambda name, index, mode, sv=self.IPAddress: self.IPHostCallback(self.IPAddress))
+
+        self.IPPort = tk.StringVar()
+        if (":" in config['GPS1']['Address']):
+            self.IPPort.set(config['GPS1']['Address'].split(":")[1])
+        else:
+            self.IPPort.set("")
+        self.IPPort.trace_add("write", lambda name, index, mode, sv=self.IPAddress: self.IPPortCallback(self.IPPort))
+    
+        self.GPSAddr = ttk.Entry(self.frame2b, textvariable=self.IPAddress, width=16) 
+        self.GPSPort = ttk.Entry(self.frame2b, textvariable=self.IPPort, width=8) 
+        self.GPSAddrLab = ttk.Label(self.frame2b, text="Address", style="CommOK.TLabel") 
+        self.GPSPortLab = ttk.Label(self.frame2b, text="Port", style="CommOK.TLabel") 
+        self.GPSLstBx = ttk.Combobox(self.frame2b, values=getAddresses( config['GPS1']['Mode'] ), 
+                                         width=15, style="CommOK.TCombobox")
+        self.GPSLstBx.bind('<<ComboboxSelected>>', self.onSelectAddressGPS)
+        self.GPSDescLab = ttk.Label(self.frame2b, text="", style="CommOK.TLabel") 
+        self.GPSLstLab = ttk.Label(self.frame2b, text="", style="CommOK.TLabel") 
+        self.GPSLstBx = ttk.Combobox(self.frame2b, values=getAddresses( config['GPS1']['Mode'] ), width=15, style="CommOK.TCombobox")
+        self.GPSDescLab = ttk.Label(self.frame2b, text="", style="CommOK.TLabel") 
 
         XLab = ttk.Label(frame2, text="Lng") 
-        XLab.grid(row=1, column = 0, pady=5)
+        XLab.grid(row=2, column = 0, pady=5)
         self.X1Val = tk.DoubleVar()
         self.X1Val.set(0.0)
         XEnt = ttk.Entry(frame2, textvariable=self.X1Val) 
-        XEnt.grid(row=1, column = 1, pady=5)
+        XEnt.grid(row=2, column = 1, padx=5, pady=5)
 
         YLab = ttk.Label(frame2, text="Lat") 
-        YLab.grid(row=1, column = 2, pady=5)
+        YLab.grid(row=3, column = 0, pady=5)
         self.Y1Val = tk.DoubleVar()
         self.Y1Val.set(0.0)
         YEnt = ttk.Entry(frame2, textvariable=self.Y1Val) 
-        YEnt.grid(row=1, column = 3, pady=5)
+        YEnt.grid(row=3, column = 1, padx=5, pady=5)
 
         self.H1Val = tk.DoubleVar()  # not displayed
         self.H1Val.set(0.0)
+        self.GPSQualityVal = tk.IntVar()  # not displayed
+        self.GPSQualityVal.set(0)
 
-        # GPS2
-        self.frame2b = ttk.Frame(frame2)
-        self.frame2b.grid(row=2, column = 0, columnspan=4, pady=5, sticky=tk.W+tk.E)
-        self.GP2Lab = ttk.Label(self.frame2b, text="IP Address", style="CommOK.TLabel") 
-        self.GP2Lab.grid(row=0, column = 0, padx=5)
-
-        self.GP2IPAddr = tk.StringVar()
-        self.GP2IPAddr.set(config['GPS2']['IPAddr'])
-        self.GP2IPAddrEntry = ttk.Entry(self.frame2b, textvariable=self.GP2IPAddr) 
-        self.GP2IPAddr.trace_add("write", self.onChangedGP2)
-        self.GP2IPAddrEntry.grid(row=0, column = 1, padx=5)
-
-        self.GP2Lab2 = ttk.Label(self.frame2b, text="Port", style="CommOK.TLabel") 
-        self.GP2Lab2.grid(row=0, column = 2, padx=5)
-        self.GP2IPPort = tk.StringVar()
-        self.GP2IPPort.set(config['GPS2']['IPPort'])
-        self.GP2IPPortEntry = ttk.Entry(self.frame2b, textvariable=self.GP2IPPort) 
-        self.GP2IPPort.trace_add("write", self.onChangedGP2)
-        self.GP2IPPortEntry.grid(row=0, column = 3, padx=5)
-
-        XLab = ttk.Label(frame2, text="Lng") 
-        XLab.grid(row=3, column = 0, pady=5)
-        self.X2Val = tk.DoubleVar()
-        self.X2Val.set(0.0)
-        XEnt = ttk.Entry(frame2, textvariable=self.X2Val) 
-        XEnt.grid(row=3, column = 1, pady=5)
-
-        YLab = ttk.Label(frame2, text="Lat") 
-        YLab.grid(row=3, column = 2, pady=5)
-        self.Y2Val = tk.DoubleVar()
-        self.Y2Val.set(0.0)
-        YEnt = ttk.Entry(frame2, textvariable=self.Y2Val) 
-        YEnt.grid(row=3, column = 3, pady=5)
-
-        self.H2Val = tk.DoubleVar()  # not displayed
-        self.H2Val.set(0.0)
+        self.doGPSUI(self.frame2b)
 
         # EM info
         frame3 = ttk.LabelFrame(self, text="EM")
         frame3.grid(row=2, column = 0, columnspan=2, sticky=tk.W+tk.E+tk.S)
         
         self.frame3a = ttk.Frame(frame3)
-        self.frame3a.grid(row=0, column = 0, columnspan=8, pady=5, sticky=tk.W+tk.E)
+        self.frame3a.grid(row=0, column = 0, columnspan=8, sticky=tk.W+tk.E)
+        self.EMModeLab = ttk.Label(self.frame3a, text="Mode", style="CommOK.TLabel") 
+        self.EMModeLab.grid(row=0, column = 0, padx=5, pady=6)
+        self.EMModeCbBx = ttk.Combobox(self.frame3a, values=["Undefined", "Bluetooth", "Serial"], width=15, style="CommOK.TCombobox")
+        self.EMModeCbBx.set(config['EM']['Mode'])
+        self.EMModeCbBx.bind('<<ComboboxSelected>>', self.onSelectModeEM)
+        self.EMModeCbBx.grid(row=0, column = 1, padx=5, pady=6)
+
         self.EMLab = ttk.Label(self.frame3a, text="Port", style="CommOK.TLabel") 
-        self.EMLab.grid(row=0, column = 0, padx=5)
-        self.EMCbBx = ttk.Combobox(self.frame3a, values=getComPorts(), width=15, style="CommOK.TCombobox")
-        self.EMCbBx.set(config['EM']['Port'])
+        self.EMLab.grid(row=1, column = 0, padx=5, pady=6)
+        self.EMCbBx = ttk.Combobox(self.frame3a, values=getAddresses(config['EM']['Mode']), width=15, style="CommOK.TCombobox")
+        self.EMCbBx.set(config['EM']['Address'])
+        config['EM']['Baud'] = '38400' #fixme
 
-        self.EMCbBx.bind('<<ComboboxSelected>>', self.onSelectEM)
-        self.EMCbBx.grid(row=0, column = 1, padx=5)
+        self.EMCbBx.bind('<<ComboboxSelected>>', self.onSelectAddressEM)
+        self.EMCbBx.grid(row=1, column = 1, padx=5, pady=6)
         self.EMDescLab = ttk.Label(self.frame3a, text="") 
-        desc = comPortDescriptions.get(config['EM']['Port'], 0)
-        if desc:
-            self.EMDescLab.configure(text=desc)
 
-        self.EMDescLab.grid(row=0, column = 2, padx=5, sticky=tk.W+tk.E, columnspan=6)
+        self.EMDescLab.grid(row=1, column = 2, padx=5, sticky=tk.W+tk.E, columnspan=6)
 
         frame3b = ttk.Frame(frame3)
-        frame3b.grid(row=1, column = 0, columnspan=8, pady=5, sticky=tk.W)
+        frame3b.grid(row=1, column = 0, columnspan=8, sticky=tk.W + tk.E)
         TempLab = ttk.Label(frame3b, text="Temperature", style="CommOK.TLabel") 
-        TempLab.grid(row=0, column = 0, pady=5)
+        TempLab.grid(row=0, column = 0, pady=6)
         self.EM_TemperatureVal= tk.DoubleVar()
         self.EMTemperature = ttk.Label(frame3b, textvariable=self.EM_TemperatureVal) 
-        self.EMTemperature.grid(row=0, column = 1, padx=5)
+        self.EMTemperature.grid(row=0, column = 1, padx=5, pady=6)
 
 
         self.D025Lab = ttk.Label(frame3, text="025", style="CommOK.TLabel") 
@@ -254,25 +307,25 @@ class EMApp(ttk.Frame):
         D10Ent.grid(row=2, column = 5, pady=5)
 
         self.D075Lab = ttk.Label(frame3, text="075", style="CommOK.TLabel") 
-        self.D075Lab.grid(row=2, column = 6, pady=5)
+        self.D075Lab.grid(row=3, column = 0, pady=5)
         self.EM_HCPHVal = tk.DoubleVar()
         self.EM_HCPIHVal = tk.DoubleVar()
         D075Ent = ttk.Entry(frame3, textvariable=self.EM_HCPHVal, width=8) 
-        D075Ent.grid(row=2, column = 7, pady=5)
+        D075Ent.grid(row=3, column = 1, pady=5)
         
         self.D15Lab = ttk.Label(frame3, text="15", style="CommOK.TLabel") 
-        self.D15Lab.grid(row=2, column = 8, pady=5)
+        self.D15Lab.grid(row=3, column = 2, pady=5)
         self.EM_HCP1Val = tk.DoubleVar()
         self.EM_HCPI1Val = tk.DoubleVar()
         D15Ent = ttk.Entry(frame3, textvariable=self.EM_HCP1Val, width=8) 
-        D15Ent.grid(row=2, column = 9, pady=5)
+        D15Ent.grid(row=3, column = 3, pady=5)
 
         self.D30Lab = ttk.Label(frame3, text="30", style="CommOK.TLabel") 
-        self.D30Lab.grid(row=2, column = 10, pady=5)
+        self.D30Lab.grid(row=3, column = 4, pady=5)
         self.EM_HCP2Val = tk.DoubleVar()
         self.EM_HCPI2Val = tk.DoubleVar()
         D30Ent = ttk.Entry(frame3, textvariable=self.EM_HCP2Val, width=8) 
-        D30Ent.grid(row=2, column = 11, pady=5)
+        D30Ent.grid(row=3, column = 5, pady=5)
 
        # Undisplayed 
         self.TrackVal= tk.DoubleVar()
@@ -280,6 +333,12 @@ class EMApp(ttk.Frame):
         self.EM_VoltsVal= tk.DoubleVar()
         self.EM_PitchVal= tk.DoubleVar()
         self.EM_RollVal= tk.DoubleVar()
+
+
+        frame4 = ttk.LabelFrame(self, text="Tracking")
+        frame4.grid(row=1, column = 3, columnspan=2, rowspan=2, sticky=tk.W+tk.E+tk.N)
+        self.track = tk.Canvas(frame4)
+        self.track.grid(row=0, column = 0, sticky=tk.W+tk.E+tk.N)
 
         # The plot we are measuring
         large_font = ('Verdana',35)
@@ -316,93 +375,179 @@ class EMApp(ttk.Frame):
         ExitBtn.grid(row=0, column = 1, pady=5, padx=10)
 
         self.pack()
+        self.clearTracks()
 
         self.monitor = root.after(250, self.doMonitor)
 
-    def onSelectGP1 (self, evt):
+    def doGPSUI(self, w):
+
+        for c in w.winfo_children():
+            c.grid_forget()
+        self.X1Val.set(0)
+        self.Y1Val.set(0)
+        self.GPSQualityVal.set(0)
+        self.GPSModeLab.grid(row=0, column = 0, padx=5, pady=6)
+        self.GPSModeBx.grid(row=0, column = 1, padx=5, pady=6)
+        #self.GPSModeDesc.grid(row=0, column = 2, columnspan=6, pady=6)
+        self.GPSMsgLab.grid(row=0, column = 2, columnspan=6, pady=6)
+
+        if (config['GPS1']['Mode'] == "IP"):
+
+            self.GPSAddrLab.grid(row=1, column = 0, padx=5, pady=6)
+            self.GPSAddr.grid(row=1, column = 1, padx=5, pady=6)
+
+            self.GPSPortLab.grid(row=1, column = 2, padx=5, pady=6)
+            self.GPSPort.grid(row=1, column = 3, padx=5, pady=6)
+
+        if (config['GPS1']['Mode'] == "Serial"):
+            currentCOMPorts = getAddresses("Serial")
+#fixme - if they change mode the address will be invalid            
+#            if (config['GPS1']['Address'] not in currentCOMPorts):
+#                config['GPS1']['Address'] = currentCOMPorts[0]
+
+            self.GPSLstLab.configure(text="Port")
+            self.GPSLstBx.set(config['GPS1']['Address'])
+            self.GPSLstBx.configure(values = currentCOMPorts)
+            desc = comPortDescriptions.get(config['GPS1']['Address'], 0)
+            if desc:
+                self.GPSDescLab.configure(text=desc) # Adjacent 
+            else:
+                self.GPSDescLab.configure(text="")
+            self.GPSLstLab.grid(row=1, column = 0, padx=5, pady=6)
+            self.GPSLstBx.grid(row=1, column = 1, padx=5, pady=6)
+            self.GPSDescLab.grid(row=1, column = 2, padx=5, pady=6, sticky=tk.E+tk.W)
+
+        if (config['GPS1']['Mode'] == "Bluetooth"):
+            currentBTNames = getAddresses("Bluetooth")
+#            if (config['GPS1']['Address'] not in currentBTNames):
+#                config['GPS1']['Address'] = currentBTNames[0]
+
+            self.GPSLstLab.configure(text="Device")
+            self.GPSLstBx.set(config['GPS1']['Address'])
+            self.GPSLstBx.configure(values = currentBTNames)
+            self.GPSLstBx.bind('<<ComboboxSelected>>', self.onSelectAddressGPS)
+            self.GPSLstLab.grid(row=1, column = 0, padx=5, pady=6)
+            self.GPSLstBx.grid(row=1, column = 1, padx=5, pady=6)
+            self.GPSDescLab.grid(row=1, column = 2, padx=5, pady=6, sticky=tk.E+tk.W)
+
+            #desc = BTPortDescriptions.get(config['GPS1']['Address'], 0)
+            #if desc:
+            #    self.GPSDescLab.configure(text=desc) # Adjacent 
+            #else:
+            #    self.GPSDescLab.configure(text="")
+            #self.GPSLstBx.configure(values = getAddresses( value ))
+
+    def onSelectModeGPS(self, evt):
+        value = "Undefined"
+        try:
+            w = evt.widget
+            value = w.get()
+        except: 
+            pass
+
+        config['GPS1']['Mode'] = value
+        self.onGPSNoError()
+        self.doGPSUI(self.frame2b)
+        self.restartGPS1Flag.set()
+        return
+    
+    
+    def onSelectAddressGPS (self, evt):
         w = evt.widget
         value = w.get()
-        config['GPS1']['Port'] = value
-        self.frame2a.configure(style="CommOK.TFrame")
-        self.GP1Lab.configure(style="CommOK.TLabel")
-        self.GP1LstBx.configure(style="CommOK.TCombobox")
+        config['GPS1']['Address'] = value
+        self.onGPSNoError()
         desc = comPortDescriptions.get(value, 0)
         if desc:
-            self.GP1DescLab.configure(text=desc, style="CommOK.TLabel")
+            self.GPSDescLab.configure(text=desc, style="CommOK.TLabel")
         else:
-            self.GP1DescLab.configure(text="", style="CommOK.TLabel")
+            self.GPSDescLab.configure(text="", style="CommOK.TLabel")
+        self.GPSQualityVal.set(0)
+        self.X1Val.set(0.0)
+        self.Y1Val.set(0.0)
         
         self.restartGPS1Flag.set()
         self.lastGPS1Time = datetime.datetime.now() 
         saveConfig()
 
-    def onGP1Error (self, msg):
-        self.frame2a.configure(style="CommError.TFrame")
-        self.GP1Lab.configure(style="CommError.TLabel")
-        self.GP1LstBx.configure(style="CommError.TCombobox")
-        self.GP1DescLab.configure(text=msg, style="CommError.TLabel")
-
-    def onGP1NoError (self):
-        s = self.frame2a.cget("style")
-        if (s != "CommOK.TFrame" ):
-            self.frame2a.configure(style="CommOK.TFrame")
-            self.GP1Lab.configure(style="CommOK.TLabel")
-            self.GP1LstBx.configure(style="CommOK.TCombobox")
-            self.GP1DescLab.configure(text="", style="CommOK.TLabel")
-
-    def hasGP1Error (self):
-        s = self.frame2a.cget("style")
-        if (s != "CommOK.TFrame" ):
-            return True
-        return False
-
-    def onChangedGP2 (self, var, index, mode):
-        config['GPS2']['IPAddr'] = self.GP2IPAddr.get()
-        config['GPS2']['IPPort'] = self.GP2IPPort.get()
-        self.frame2b.configure(style="CommOK.TFrame")
-        self.GP2Lab.configure(style="CommOK.TLabel")
-        self.GP2IPAddrEntry.configure(style="CommOK.TEntry")
-        self.GP2IPPortEntry.configure(style="CommOK.TEntry")
-#        desc = comPortDescriptions.get(value, 0)
-#        if desc:
-#            self.GP2DescLab.configure(text=desc, style="CommOK.TLabel")
-#        else:
-#            self.GP2DescLab.configure(text="", style="CommOK.TLabel")
-        
-        self.restartGPS2Flag.set()
-        self.lastGPS2Time = datetime.datetime.now() 
-        saveConfig()
-
-    def onGP2Error (self, msg):
+    def onGPSError (self, msg):
+        self.ringTheBell()
         self.frame2b.configure(style="CommError.TFrame")
-        self.GP2Lab.configure(style="CommError.TLabel")
-        self.GP2Lab2.configure(style="CommError.TLabel")
-        self.GP2IPAddrEntry.configure(style="CommError.TEntry")
-        self.GP2IPPortEntry.configure(style="CommError.TEntry")
+        self.GPSMsgLab.configure(text=msg)
+        self.GPSModeLab.configure(style="CommError.TLabel")
+        self.GPSMsgLab.configure(style="CommError.TLabel")
+        self.GPSAddrLab.configure(style="CommError.TLabel")
+        self.GPSPortLab.configure(style="CommError.TLabel")
+        self.GPSDescLab.configure(style="CommError.TLabel")
+        self.GPSLstLab.configure(style="CommError.TLabel")
 
-    def onGP2NoError (self):
+    def onGPSNoError (self):
         s = self.frame2b.cget("style")
         if (s != "CommOK.TFrame" ):
             self.frame2b.configure(style="CommOK.TFrame")
-            self.GP2Lab.configure(style="CommOK.TLabel")
-            self.GP2Lab2.configure(style="CommOK.TLabel")
-            self.GP2IPAddrEntry.configure(style="CommOK.TEntry")
-            self.GP2IPPortEntry.configure(style="CommOK.TEntry")
+            self.GPSMsgLab.configure(text="")
+            self.GPSModeLab.configure(style="CommOK.TLabel")
+            self.GPSMsgLab.configure(style="CommOK.TLabel")
+            self.GPSAddrLab.configure(style="CommOK.TLabel")
+            self.GPSPortLab.configure(style="CommOK.TLabel")
+            self.GPSDescLab.configure(style="CommOK.TLabel")
+            self.GPSLstLab.configure(style="CommOK.TLabel")
 
-    def hasGP2Error (self):
+    def hasGPSError (self):
         s = self.frame2b.cget("style")
         if (s != "CommOK.TFrame" ):
             return True
         return False
+    
+    def onSelectModeEM (self, evt):
+        value = "Undefined"
+        try:
+            w = evt.widget
+            value = w.get()
+        except:
+            pass
+        config['EM']['Mode'] = value
+        if (value == "Serial"):
+            currentCOMPorts = getAddresses("Serial")
+            self.EMCbBx.configure(values = currentCOMPorts)
+            if (config['EM']['Address'] not in currentCOMPorts):
+                config['EM']['Address'] = currentCOMPorts[0]
+            desc = comPortDescriptions.get(config['EM']['Address'], 0)
+            if desc:
+                self.EMDescLab.configure(text=desc) 
+            else:
+                self.EMDescLab.configure(text="")
+        if (value == "Bluetooth"):
+            currentBTNames = getAddresses("Bluetooth")
+            self.EMCbBx.configure(values = currentBTNames)
+            if (config['EM']['Address'] not in currentBTNames):
+                config['EM']['Address'] = currentBTNames[0]
+            desc = BTPortDescriptions.get(config['EM']['Address'], 0)
+            if desc:
+                self.EMDescLab.configure(text=desc) 
+            else:
+                self.EMDescLab.configure(text="")
 
-    def onSelectEM (self, evt):
-        w = evt.widget
-        value = w.get()
-        config['EM']['Port'] = value
-        desc = comPortDescriptions.get(value, 0)
-        self.frame3a.configure(style="CommOK.TFrame")
-        self.EMLab.configure(style="CommOK.TLabel")
-        self.EMCbBx.configure(style="CommOK.TCombobox")
+        self.restartEMFlag.set()
+        self.onEMNoError()
+        #print("onSelectModeEM: mode=" + value)
+
+    def onSelectAddressEM (self, evt):
+        value = "Undefined"
+        try:
+            w = evt.widget
+            value = w.get()
+        except:
+            pass
+        config['EM']['Address'] = value
+        self.onEMNoError ()
+
+        desc = ""
+        if (config['EM']['Mode'] == "Serial"):
+            desc = comPortDescriptions.get(value, 0)
+        if (config['EM']['Mode'] == "Bluetooth"):
+            desc = BTPortDescriptions.get(value, 0)
+            
         if desc:
             self.EMDescLab.configure(text=desc, style="CommOK.TLabel")
         else:
@@ -411,10 +556,19 @@ class EMApp(ttk.Frame):
         self.restartEMFlag.set()
         self.lastEMTime = datetime.datetime.now() 
         saveConfig()
+        #print("onSelectAddressEM: addr=" + value)
+
+    # Ensure we dont get too many bells
+    def ringTheBell (self):
+        if (datetime.datetime.now() - self.lastBellTime).total_seconds() > 5:
+            root.bell()
+            self.lastBellTime = datetime.datetime.now()
 
     def onEMError (self, msg):
+        self.ringTheBell()
         self.frame3a.configure(style="CommError.TFrame")
         self.EMLab.configure(style="CommError.TLabel")
+        self.EMModeLab.configure(style="CommError.TLabel")
         self.EMCbBx.configure(style="CommError.TCombobox")
         self.EMDescLab.configure(text=msg, style="CommError.TLabel")
 
@@ -423,6 +577,7 @@ class EMApp(ttk.Frame):
         if (s != "CommOK.TFrame" ):
             self.frame3a.configure(style="CommOK.TFrame")
             self.EMLab.configure(style="CommOK.TLabel")
+            self.EMModeLab.configure(style="CommOK.TLabel")
             self.EMCbBx.configure(style="CommOK.TCombobox")
             self.EMDescLab.configure(text="", style="CommOK.TLabel")
 
@@ -455,7 +610,7 @@ class EMApp(ttk.Frame):
     def startLogging(self):
         if not os.path.exists(self.saveFile.get()):
             with open(self.saveFile.get(), 'w') as the_file:
-               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude 1,Latitude 1,Elevation 1,Longitude 2,Latitude 2,Elevation 2,Speed 2,Track 2,EM PRP1,EM PRP2,EM PRPH,EM HCP1,EM HCP2,EM HCPH,EM PRPI1,EM PRPI2,EM PRPIH,EM HCPI1,EM HCPI2,EM HPCIH,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator.get()) + '\n')
+               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP1,EM PRP2,EM PRPH,EM HCP1,EM HCP2,EM HCPH,EM PRPI1,EM PRPI2,EM PRPIH,EM HCPI1,EM HCPI2,EM HPCIH,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator.get()) + '\n')
         self.doLogging()
 
     def pauseLogging(self):
@@ -465,25 +620,18 @@ class EMApp(ttk.Frame):
 
     def doMonitor(self):
         try:
-            if (datetime.datetime.now() - self.lastGPS1Time).total_seconds() > 2:
-                self.onGP1Error("Timeout")
+            if not self.hasGPSError() and (datetime.datetime.now() - self.lastGPS1Time).total_seconds() > 2:
+                self.onGPSError("Timeout")
 
-            if (self.hasGP1Error()):
-                self.numGP1Errors += 1
+            #if (self.GPSQualityCode() != "Invalid" and self.GPSQualityCode() != "RTK Fixed"): # invalid will trigger a timeout
+            #    self.onGPSError("Quality: " + self.GPSQualityCode())
 
-            if (self.numGP1Errors > 10):
-                self.onGP1NoError()
-                self.numGP1Errors = 0
+            if (self.hasGPSError()):
+                self.numGPSErrors += 1
 
-            if (datetime.datetime.now() - self.lastGPS2Time).total_seconds() > 2:
-                self.onGP2Error("Timeout")
-
-            if (self.hasGP2Error()):
-                self.numGP2Errors += 1
-
-            if (self.numGP2Errors > 10):
-                self.onGP2NoError()
-                self.numGP2Errors = 0
+            if (self.numGPSErrors > 10):
+                self.onGPSNoError()
+                self.numGPSErrors = 0
 
             if (datetime.datetime.now() - self.lastEMTime).total_seconds() > 2:
                 if (not self.hasEMError()):
@@ -497,19 +645,38 @@ class EMApp(ttk.Frame):
                 self.onEMNoError()
                 self.numEMErrors = 0
 
+            # Check for new devices being plugged in
+            if (hasattr(self, "GPSLstBx") | hasattr(self, "EMModeCbBx")):
+                checkBTPorts()
+                checkComPorts()
+
+            # Ensure new devices are added to the combobox
+            if (hasattr(self, "GPSLstBx")):
+                if config['GPS1']['Mode'] != "Undefined":
+                    oldAddresses = self.GPSLstBx.cget('values')
+                    newAddresses = getAddresses(config['GPS1']['Mode'])
+                    if (oldAddresses != newAddresses):
+                        self.GPSLstBx.config(values=newAddresses)
+                else:
+                    self.GPSLstBx.set("")
+                    self.GPSLstBx.configure(values=[])
+
+            if hasattr(self, "EMCbBx"):
+                if config['EM']['Mode'] != "Undefined":
+                    oldAddresses = self.EMCbBx.cget('values')
+                    newAddresses = getAddresses(config['EM']['Mode'])
+                    if (oldAddresses != newAddresses):
+                        self.EMCbBx.config(values=newAddresses)
+                else:
+                    self.EMCbBx.set("")
+                    self.EMCbBx.configure(values = [])
+
         except Exception as e:
             if hasattr(e, 'message'):
                 print(e.message)
             else:
                 print(e)
             pass
-
-        oldComports = self.GP1LstBx.cget('values')
-        newComports = getComPorts()
-        if (oldComports != newComports):
-            #print("old= + %s" % (oldComports,))
-            self.GP1LstBx.config(values=newComports)
-            self.EMCbBx.config(values=newComports)
 
         self.monitor = root.after(250, self.doMonitor)
 
@@ -536,23 +703,88 @@ class EMApp(ttk.Frame):
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
         line = time_now +  "," + \
             str(self.X1Val.get()) + "," + str(self.Y1Val.get()) + "," + str(self.H1Val.get()) + "," + \
-            str(self.X2Val.get()) + "," + str(self.Y2Val.get()) + "," + str(self.H2Val.get()) + "," + \
-            str(self.SpeedVal.get()) + "," + str(self.TrackVal.get()) + \
+            str(self.SpeedVal.get()) + "," + str(self.TrackVal.get()) + "," + self.GPSQualityCode() +\
                 self.getE1() + \
                 '\n'
         with open(self.saveFile.get(), 'a') as the_file:
             the_file.write(line)
             the_file.flush()
+        self.markTrack(self.X1Val.get(), self.Y1Val.get())
+
+    def markTrack(self, X, Y):
+        self.recalcTrackExtents() 
+        cx, cy = self.wToC(X, Y)
+        if cx is not None:
+            self.track.create_oval(cx-5, cy-5, cx+5, cy+5, fill="red", outline = "")
+        self.coords.append([X, Y])
+
+    # Latitude/longitude coord to a pixel coordinate 
+    def wToC(self, X, Y):
+        if (len(self.coords) < 2 or 
+            self.trackWidth <= 0 or 
+            self.trackHeight <= 0 or
+            self.geoWidth <= 0 or 
+            self.geoHeight <= 0): 
+            return None, None
+
+        deltaLat = Y - self.trackMinLat
+        deltaLong= X - self.trackMinLong
+
+        latRatio = deltaLat / self.geoWidth
+        longRatio= deltaLong / self.geoHeight
+
+        x = max(0, min(self.trackWidth, latRatio * self.trackWidth))
+        y = max(0, min(self.trackHeight, longRatio * self.trackHeight))
+
+        return x,y
+
+    def recalcTrackExtents(self):
+        if (len(self.coords) < 2 or
+            (datetime.datetime.now() - self.coordStamp).total_seconds() < 30):
+            return
+
+        self.trackMinLong = self.trackMinLat = 1000
+        self.trackMaxLong = self.trackMaxLat = -1000
+        for coord in self.coords:
+            if coord[0] < self.trackMinLong:
+                self.trackMinLong = coord[0]
+            if coord[0] > self.trackMaxLong:
+                self.trackMaxLong = coord[0]
+            if coord[1] < self.trackMinLat:
+                self.trackMinLat = coord[1]
+            if coord[1] > self.trackMaxLat:
+                self.trackMaxLat = coord[1]
+
+        self.trackWidth = int(self.track.cget("width"))
+        self.trackHeight = int(self.track.cget("height"))
+        self.geoWidth = self.trackMaxLat - self.trackMinLat
+        self.geoHeight= self.trackMaxLong - self.trackMinLong
+
+        self.track.delete("all")
+        for long,lat in self.coords:
+            cx, cy = self.wToC(long, lat)
+            if cx is not None:
+                self.track.create_oval(cx-5,cy-5,cx + 5, cy+5, fill="red", outline = "")
+
+        self.coordStamp = datetime.datetime.now()
+                           
+    def clearTracks(self):
+        print("Cleared tracks")
+        self.coordStamp = datetime.datetime.now()
+        self.coords = []
+        self.trackMinLong = self.trackMinLat = 1000
+        self.trackMaxLong = self.trackMaxLat = -1000
+        self.geoWidth = self.geoHeight = 0
+        self.trackWidth = self.trackHeight = 0
 
     # Write to the plot file 
     def doitPlot(self):
         if not os.path.exists(self.savePlotFile.get()):
             with open(self.savePlotFile.get(), 'w') as the_file:
-               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Plot,Longitude 1,Latitude 1,Height 1,Longitude 2,Latitude 2,Height 2,E1_PRP1,E1_PRP2,E1_PRPH,E1_HCP1,E1_HCP2,E1_HCPH,E1_PRPI1,E1_PRPI2,E1_PRPIH,E1_HCPI1,E1_HCPI2,E1_HCPIH,E1_Volts,E1_Temperature,E1_Pitch,E1_Roll,Operator=' + str(self.operator.get()) + '\n')
+               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Plot,Longitude 1,Latitude 1,Height 1,E1_PRP1,E1_PRP2,E1_PRPH,E1_HCP1,E1_HCP2,E1_HCPH,E1_PRPI1,E1_PRPI2,E1_PRPIH,E1_HCPI1,E1_HCPI2,E1_HCPIH,E1_Volts,E1_Temperature,E1_Pitch,E1_Roll,Operator=' + str(self.operator.get()) + '\n')
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
         line = time_now + "," + self.SeqVal.get() + "," +\
             str(self.X1Val.get()) + "," + str(self.Y1Val.get()) + "," + str(self.H1Val.get()) + "," + \
-            str(self.X2Val.get()) + "," + str(self.Y2Val.get()) + "," + str(self.H2Val.get()) + \
             self.getE1() + \
             '\n'
 
@@ -560,11 +792,62 @@ class EMApp(ttk.Frame):
             the_file.write(line)
             the_file.flush()
 
+        self.markTrack(self.X1Val.get(), self.Y1Val.get())
+
+    def GPSQualityCode(self):
+        code = self.GPSQualityVal.get()
+        if (code == 0): 
+            return "Invalid"
+        if (code == 1): 
+            return "GPS"
+        if (code == 2): 
+            return "Diff. GPS"
+        if (code == 3): 
+            return "NA"
+        if (code == 4): 
+            return "RTK Fixed"
+        if (code == 5): 
+            return "RTK Float"
+        if (code == 6): 
+            return "INS DeadR"
+        return "Unknown"
+
+    def openComms(self, cfg):
+        print("Opening " + cfg['Mode'] + ' ' + cfg['Address'] + '\n')
+        s = self.openCommsReal(cfg)
+        #try: 
+        #    s.write(b'%\r\n') # Sometimes this is needed, sometimes not...
+        #except:
+        #    pass
+        #finally:
+        #    s.close()
+        #sleep(1) ??
+        #s = self.openCommsReal(cfg)
+        return s
+
+    def openCommsReal(self, cfg):
+        if (cfg['Mode'] == "Bluetooth"):
+            s = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_STREAM, socket.BTPROTO_RFCOMM)
+            btName = cfg['Address']
+            btAddr = ""
+            for addr, name in BTPortDescriptions.items(): 
+                if name == btName:
+                    btAddr = addr
+            s.connect((btAddr, 1))
+        elif (cfg['Mode'] == "IP"):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((cfg['Address'], int(cfg['Port'])))
+        elif (cfg['Mode'] == "Serial"):
+            s = serial.Serial(cfg['Address'], cfg['Baud'], timeout=2, write_timeout=2)
+        else:
+            raise Exception("Unknown mode " + cfg['Mode'])
+        return s
+
     # The gps reader thread
     def gps1_read(self, cfgName):
-        cfg = config[cfgName]
         while not self.stopFlag.is_set():
-            if cfg['Port'] == "Undefined":
+            cfg = config[cfgName]
+            if (cfg['Mode'] == "Undefined") | ("No devices" in cfg['Address']):
                self.lastGPS1Time = datetime.datetime.now()
             else:
                 s = None
@@ -573,33 +856,47 @@ class EMApp(ttk.Frame):
                     self.X1Val.set(0.0)
                     self.Y1Val.set(0.0)
                     self.H1Val.set(0.0)
+                    s = self.openComms(cfg)
 
-                    s = serial.Serial(cfg['Port'], cfg['Baud'])
-                    #s.write(b'%') 
                     while (not self.stopFlag.is_set() ) & (not self.restartGPS1Flag.is_set()):
-                        line = s.readline() 
+                        line = self.buffered_readLine(s) 
                         # nonblocking read()? - https://stackoverflow.com/questions/38757906/python-3-non-blocking-read-with-pyserial-cannot-get-pyserials-in-waiting-pro/
                         #print("line = " + line)
-                        linedata = str(line)[2:]
+                        linedata = str(line)[1:]
                         splitlines = linedata.split(',')
     
-                        if "GPGGA" in linedata:
+                        if ("GPGGA" in splitlines[0]) or ("GNGGA" in splitlines[0]):
                             S = decimal_degrees(*dm(float(splitlines[2])))
                             if splitlines[3].find('S') >= 0:
                                 S = S * -1
                             E = decimal_degrees(*dm(float(splitlines[4])))
                             H = float(splitlines[9])
+                            Q = int(splitlines[6])
                             with lock:
                                 self.X1Val.set(E)
                                 self.Y1Val.set(S)
                                 self.H1Val.set(H)
+                                self.GPSQualityVal.set(Q)
                                 #print("X= " + str(self.XVal.get()))
                             self.lastGPS1Time = datetime.datetime.now()
+                        if "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
+                            T = 0.0
+                            if splitlines[1] != "":
+                                T = float(splitlines[1])
+                            S = 0.0
+                            if splitlines[7] != "":
+                                S = float(splitlines[7])
+                            with lock:
+                                self.TrackVal.set(T)
+                                self.SpeedVal.set(S)
+                            #print("Track= " + str(T))
+
                 except Exception as e:
                     if hasattr(e, 'message'):
-                        self.onGP1Error("Exception opening " + cfg['Port'] + e.message)
+                        self.onGPSError("Exception opening " + cfg['Address'] + e.message)
                     else:
-                        self.onGP1Error("Exception opening " + cfg['Port'])
+                        self.onGPSError("Exception opening " + cfg['Address'])
+                        print(e)
                     pass
                 if s is not None:
                     s.close()
@@ -616,69 +913,11 @@ class EMApp(ttk.Frame):
                 break
         return line
 
-    # The gps reader thread
-    def gps2_read(self, cfgName):
-        cfg = config[cfgName]
-        while not self.stopFlag.is_set():
-            if cfg['IPAddr'] == "Undefined":
-               self.lastGPS2Time = datetime.datetime.now()
-            else:
-                s = None
-                try:
-                    self.restartGPS2Flag.clear()
-                    self.X2Val.set(0.0)
-                    self.Y2Val.set(0.0)
-                    self.H2Val.set(0.0)
-
-                    cfg = config[cfgName]
-                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    s.connect((cfg['IPAddr'], int(cfg['IPPort'])))
-                    # s.write(b'%\r\n') 
-                    #print("opened")
-                    while (not self.stopFlag.is_set()) & (not self.restartGPS2Flag.is_set()):
-                        line = self.buffered_readLine(s)
-                        #print("line = " + line)
-                        linedata = str(line)[1:]
-                        splitlines = linedata.split(',')
-
-                        if "GPGGA" in linedata:
-                            S = decimal_degrees(*dm(float(splitlines[2])))
-                            E = decimal_degrees(*dm(float(splitlines[4])))
-                            H = float(splitlines[9])
-                            with lock:
-                                self.X2Val.set(E)
-                                self.Y2Val.set(S)
-                                self.H2Val.set(H)
-                                #print("X= " + str(self.XVal.get()))
-                            self.lastGPS2Time = datetime.datetime.now()
-                        if "GPVTG" in linedata: # http://aprs.gids.nl/nmea/#vtg
-                            T = 0.0
-                            if splitlines[1] != "":
-                                T = float(splitlines[1])
-                            S = 0.0
-                            if splitlines[7] != "":
-                                S = float(splitlines[7])
-                            with lock:
-                                self.TrackVal.set(T)
-                                self.SpeedVal.set(S)
-                            #print("Track= " + str(T))
-                            self.lastGPS2Time = datetime.datetime.now()
-                    if s is not None:        
-                        s.close()
-                except Exception as e:
-                    if hasattr(e, 'message'):
-                        print("Exception opening " + cfg['IPAddr'] + e.message)
-                    else:
-                        print("Exception opening " + cfg['IPAddr'])
-                    pass
-            time.sleep(1)
-
-
     # The em reader thread
     def em1_read(self, cfgName):
-        cfg = config[cfgName]
         while not self.stopFlag.is_set():
-            if cfg['Port'] == "Undefined":
+            cfg = config[cfgName]
+            if (cfg['Mode'] == "Undefined") | ("No devices" in cfg['Address']):
                self.lastEMTime = datetime.datetime.now()
             else:
                 self.restartEMFlag.clear()
@@ -697,9 +936,8 @@ class EMApp(ttk.Frame):
                 s = None
                 try:
                     self.onEMNoError()
-                    print("Opening " + cfg['Port'] + '\n') 
-                    s = serial.Serial(cfg['Port'], cfg['Baud'], timeout=2, write_timeout=2)
-                    s.write(b'%\r\n') 
+                    s = self.openComms(cfg)
+
                     line = ''
                     while (not self.stopFlag.is_set() ) & (not self.restartEMFlag.is_set() ):
                         while (line.find('\n') < 0 & (not self.restartEMFlag.is_set())):
@@ -747,7 +985,7 @@ class EMApp(ttk.Frame):
                         #print("stop= " + str(self.stopFlag.is_set()) + "," + "restart= " + str( self.restartEMFlag.is_set()))
                     # end while    
                 except Exception as e:
-                    self.onEMError("Exception opening " + cfg['Port'] )
+                    self.onEMError("Exception opening " + cfg['Address'] )
                     if hasattr(e, 'message'):
                         print('msg=' + e.message)
                     else:
@@ -762,7 +1000,7 @@ root = None
 def main():
     global root
     root = tk.Tk()
-    root.geometry("600x500+200+200")
+    root.geometry("600x625+100+100")
     app = EMApp()
     root.protocol("WM_DELETE_WINDOW", app.shutDown)
 
