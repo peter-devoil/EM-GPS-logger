@@ -23,13 +23,13 @@ from tkinter import ttk
 config = configparser.ConfigParser()
 if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
     #config['GPS1'] = {'Mode': 'Undefined', 'Address': '10.0.0.1:5017'}
-    config['GPS1'] = {'Mode': 'Bluetooth', 'Address' : 'Sparkfun Facet'}
+    config['GPS1'] = {'Mode': 'Bluetooth', 'Address' : 'Facet Rover-9A22'}
     config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0'}
     #config['EM'] = {'Mode': 'Undefined', 'Port': 'Undefined', 'Baud': 38400} # COM4
     config['Operator'] = {'Name' : getpass.getuser()}
     config['IP'] = {'Recent' : "10.0.0.1:5017" }
     config['Serial'] = {'Recent' : "COM1,COM4" }
-    config['Bluetooth'] = {'Recent' : "Sparkfun Facet" }
+    config['Bluetooth'] = {'Recent' : "Facet Rover-9A22" }
 else:
     config.read('Dualem_and_GPS_datalogger.ini')
 
@@ -518,7 +518,8 @@ class EMApp(ttk.Frame):
         self.lastErrorTime = datetime.datetime.now()
         self.ringTheBell()
         if (self.errMsgText != ""):
-            self.errMsgText = self.errMsgText + "\n" + text
+            if not text in self.errMsgText:
+                self.errMsgText = self.errMsgText + "\n" + text
         else:
             self.errMsgText = text
 
@@ -575,15 +576,17 @@ class EMApp(ttk.Frame):
 
             if not self.hasGPSError() and \
                     config['GPS1']['Mode'] != "Undefined" and \
-                    (datetime.datetime.now() - self.lastGPS1Time).total_seconds() > 2:
+                    (datetime.datetime.now() - self.lastGPS1Time).total_seconds() > 5:
                 self.showMessage("GPS Timeout")
                 self.errMsgSource.append("GPS")
+                self.restartGPS1Flag.set()
 
             if not self.hasEMError() and \
                     config['EM']['Mode'] != "Undefined" and \
-                    (datetime.datetime.now() - self.lastEMTime).total_seconds() > 2:
+                    (datetime.datetime.now() - self.lastEMTime).total_seconds() > 5:
                 self.showMessage("EM Timeout")
                 self.errMsgSource.append("EM")
+                self.restartEMFlag.set()
 
             # Ensure new devices are added to the combobox
             if (hasattr(self, "GPSLstBx")):
@@ -828,7 +831,7 @@ class EMApp(ttk.Frame):
         return "Unknown"
 
     def openComms(self, cfg):
-        print("Opening " + cfg['Mode'] + ' ' + cfg['Address'] + '\n')
+        print("Opening " + cfg['Mode'] + ' ' + cfg['Address'])
         s = self.openCommsReal(cfg)
         if (hasattr(s, "write")):
             try: 
@@ -838,6 +841,7 @@ class EMApp(ttk.Frame):
             finally:
                 s.close()
             s = self.openCommsReal(cfg)
+        print("OK")
         return s
 
     def openCommsReal(self, cfg):
@@ -850,7 +854,9 @@ class EMApp(ttk.Frame):
                     btAddr = addr
             #print ("connecting to BT=" + btAddr)
             s.connect((btAddr, 1))
+            s.setblocking(0)
             s.settimeout(5)
+
         elif (cfg['Mode'] == "IP"):
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             hp = cfg['Address'].split(":")
@@ -860,7 +866,9 @@ class EMApp(ttk.Frame):
             else:
                 port = 1
             s.connect((host, port))
+            s.setblocking(0)
             s.settimeout(5)
+
         elif (cfg['Mode'] == "Serial"):
             baudrate = 38400
             if hasattr(cfg, 'Baud'):
@@ -873,6 +881,7 @@ class EMApp(ttk.Frame):
     # Decode a nmea string and set the associated TCL variable
     def nmea_decode(self, linedata, useGPS = True):
         splitlines = linedata.split(',')
+        #print(splitlines)
         if useGPS and len(splitlines) >= 10 and ("GPGGA" in splitlines[0] or "GNGGA" in splitlines[0]):
             S = decimal_degrees(*dm(float(splitlines[2])))
             if splitlines[3].find('S') >= 0:
@@ -936,7 +945,7 @@ class EMApp(ttk.Frame):
                self.lastGPS1Time = datetime.datetime.now()
             else:
                 self.restartGPS1Flag.clear()
-                self.clearMessage()
+                self.lastGPS1Time = datetime.datetime.now()
                 while "GPS" in self.errMsgSource: self.errMsgSource.remove("GPS")
                 self.X1Val.set(0.0)
                 self.Y1Val.set(0.0)
@@ -946,8 +955,8 @@ class EMApp(ttk.Frame):
                     encoding = 'ascii'
                     line = ""
                     s = self.openComms(cfg)
-                    while (not self.stopFlag.is_set() ) & (not self.restartGPS1Flag.is_set()):
-                        while (line.find('\n') < 0 & (not self.restartEMFlag.is_set())):
+                    while (not self.stopFlag.is_set()) and not self.restartGPS1Flag.is_set():
+                        while (line.find('\n') < 0) and not self.restartGPS1Flag.is_set():
                             if (cfg['Mode'] == "Serial"):
                                 if (s.in_waiting <= 0):
                                     time.sleep(0.01)
@@ -955,7 +964,27 @@ class EMApp(ttk.Frame):
                                     byt = s.read(s.in_waiting)
                                     line += str(byt, encoding) # serial "socket"
                             else:
-                                line += str(s.recv(1), encoding)  # BT, IP socket - has timeout set
+                                try:
+                                    line += str(s.recv(1), encoding)  # BT, IP socket - has timeout set
+                                except socket.timeout as e:
+                                    err = e.args[0]
+                                    # this next if/else is a bit redundant, but illustrates how the
+                                    # timeout exception is setup
+                                    if err == 'timed out':
+                                        time.sleep(1)
+                                        print("timeout detected")
+                                        continue
+                                    else:
+                                        raise e
+                                #except socket.error as e:
+                                #    # Something else happened, handle error, exit, etc.
+                                #    print(e)
+                                #else:
+                                #    if len(msg) == 0:
+                                #        print('orderly shutdown on server end')
+                                #        sys.exit(0)
+                                #    else:
+                                #        # got a message do something :)
 
                         linedata = line[1:line.find('\n')]
                         line = line[line.find('\n')+1:]
@@ -964,8 +993,8 @@ class EMApp(ttk.Frame):
                             self.lastGPS1Time = datetime.datetime.now()
 
                 except Exception as e:
-                    print("gps_read: " + str(e))
-                    self.showMessage("Can't open " + cfg['Address'])
+                    self.showMessage("gps: " + str(e))
+                    #self.showMessage("Can't open " + cfg['Address'])
                     self.errMsgSource.append("GPS")
                     pass
                 if s is not None:
@@ -976,11 +1005,11 @@ class EMApp(ttk.Frame):
     def em1_read(self, cfgName):
         while not self.stopFlag.is_set():
             cfg = config[cfgName]
+            self.lastEMTime = datetime.datetime.now()
             if (cfg['Mode'] == "Undefined") | ("No devices" in cfg['Address']):
-               self.lastEMTime = datetime.datetime.now()
+                continue
             else:
                 self.restartEMFlag.clear()
-                self.clearMessage()
                 while "EM" in self.errMsgSource: self.errMsgSource.remove("EM")
                 self.EM_HCP1Val.set(0.0)
                 self.EM_HCPI1Val.set(0.0)
@@ -999,15 +1028,26 @@ class EMApp(ttk.Frame):
                 try:
                     s = self.openComms(cfg)
                     line = ''
-                    while (not self.stopFlag.is_set() ) & (not self.restartEMFlag.is_set() ):
-                        while (line.find('\n') < 0 & (not self.restartEMFlag.is_set())):
+                    while (not self.stopFlag.is_set()) and not self.restartEMFlag.is_set():
+                        while (line.find('\n') < 0) and not self.restartEMFlag.is_set():
                             if (cfg['Mode'] == "Serial"):
                                 if (s.in_waiting > 0):
                                     line = line + s.read(s.in_waiting).decode('ascii') 
                                 if (s.in_waiting <= 0):
                                     time.sleep(0.01) 
                             else:
-                                line += str(s.recv(1), 'ascii')  # BT, IP socket - has timeout set
+                                try:
+                                    line += str(s.recv(1), 'ascii')  # BT, IP socket - has timeout set
+                                except socket.timeout as e:
+                                    err = e.args[0]
+                                    # this next if/else is a bit redundant, but illustrates how the
+                                    # timeout exception is setup
+                                    if err == 'timed out':
+                                        time.sleep(1)
+                                        print("em timeout detected")
+                                        continue
+                                    else:
+                                        raise e
 
                         linedata = line[:line.find('\n')]
                         line = line[line.find('\n')+1:]
@@ -1023,8 +1063,8 @@ class EMApp(ttk.Frame):
                         #print("stop= " + str(self.stopFlag.is_set()) + "," + "restart= " + str( self.restartEMFlag.is_set()))
                     # end while    
                 except Exception as e:
-                    print("em_read: " + str(e))
-                    self.showMessage("Cant open " + cfg['Address'] )
+                    self.showMessage(" EM: " + str(e))
+                    #self.showMessage("Cant open " + cfg['Address'] )
                     self.errMsgSource.append("EM")
                     pass
                 if (s is not None):
@@ -1046,7 +1086,6 @@ class EMApp(ttk.Frame):
 
     def checkBTPorts(self):
         if (platform.system() == "Windows"):
-            # fixme may need Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
             args = ["powershell.exe",  "-ExecutionPolicy", "RemoteSigned", "-Command", r"-"]
             process = subprocess.Popen(args, stdin = subprocess.PIPE, stdout = subprocess.PIPE)
             process.stdin.write(b"$bluetoothDevices = Get-WmiObject -Query \"SELECT * FROM Win32_PnPEntity WHERE PNPClass = 'Bluetooth'\" | Select-Object Name,HardwareID\r\n")
@@ -1071,7 +1110,7 @@ class EMApp(ttk.Frame):
                     except:
                         pass
         else:
-            self.BTPortDescriptions['b8:d6:1a:0d:9a:22'] = "Sparkfun Facet"
+            self.BTPortDescriptions['b8:d6:1a:0d:9a:22'] = "Facet Rover-9A22"
             self.BTPortDescriptions['dd:ee:ff:aa:bb:cc'] = "Sample BT 1 (garbage)"
 
     def portDiscovery(self, id):
