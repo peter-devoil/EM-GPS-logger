@@ -22,9 +22,9 @@ from tkinter import ttk
 
 config = configparser.ConfigParser()
 if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
-    #config['GPS1'] = {'Mode': 'Undefined', 'Address': '10.0.0.1:5017'}
-    config['GPS1'] = {'Mode': 'Bluetooth', 'Address' : 'Facet Rover-9A22'}
-    config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0'}
+    config['GPS1'] = {'Mode': 'IP', 'Address': '10.0.0.1:5017', 'Baud' : 4800}
+    #config['GPS1'] = {'Mode': 'Bluetooth', 'Address' : 'Facet Rover-9A22', 'Baud' : 4800}
+    config['EM'] = {'Mode': 'Serial', 'Address' : 'COM4', 'Baud' : 38400}
     #config['EM'] = {'Mode': 'Undefined', 'Port': 'Undefined', 'Baud': 38400} # COM4
     config['Operator'] = {'Name' : getpass.getuser()}
     config['IP'] = {'Recent' : "10.0.0.1:5017" }
@@ -32,6 +32,12 @@ if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
     config['Bluetooth'] = {'Recent' : "Facet Rover-9A22" }
 else:
     config.read('Dualem_and_GPS_datalogger.ini')
+
+    if not config.has_option('GPS1', 'Baud'):
+        config['GPS1']['Baud'] = "38400"
+
+    if not config.has_option('EM', 'Baud'):
+        config['EM']['Baud'] = "38400"
 
 lock = threading.Lock()
 
@@ -128,6 +134,11 @@ class EMApp(ttk.Frame):
         self.GPSModeDesc = ttk.Label(self.frame2b, text="") 
         self.GPSMsgLab = ttk.Label(self.frame2b, text="") 
 
+        self.GPSBaudLab = ttk.Label(self.frame2b, text="Baud") 
+        self.GPSBaudCbx = ttk.Combobox(self.frame2b, width=6, values=[50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200]) 
+        self.GPSBaudCbx.set(config['GPS1']['Baud'])
+        self.GPSBaudCbx.bind('<<ComboboxSelected>>', self.onSelectBaudGPS)
+
         self.IPAddress = tk.StringVar()
 
         self.IPAddress.set(config['GPS1']['Address'])
@@ -164,31 +175,32 @@ class EMApp(ttk.Frame):
         self.doGPSUI(self.frame2b)
 
         # EM info
-        frame3 = ttk.LabelFrame(self, text="Dual EM")
-        frame3.grid(row=2, column = 0, columnspan=2, sticky=tk.W+tk.E+tk.S)
+        self.frame3 = ttk.LabelFrame(self, text="Dual EM")
+        self.frame3.grid(row=2, column = 0, columnspan=2, sticky=tk.W+tk.E+tk.S)
         
-        self.frame3a = ttk.Frame(frame3)
+        self.frame3a = ttk.Frame(self.frame3)
         self.frame3a.grid(row=0, column = 0, columnspan=8, sticky=tk.W+tk.E)
         self.EMModeLab = ttk.Label(self.frame3a, text="Mode") 
-        self.EMModeLab.grid(row=0, column = 0, padx=5, pady=6)
         self.EMModeCbBx = ttk.Combobox(self.frame3a, values=["Undefined", "Bluetooth", "Serial"], width=15)
         self.EMModeCbBx.set(config['EM']['Mode'])
         self.EMModeCbBx.bind('<<ComboboxSelected>>', self.onSelectModeEM)
-        self.EMModeCbBx.grid(row=0, column = 1, padx=5, pady=6)
+
+        self.EMBaudLab = ttk.Label(self.frame3a, text="Baud") 
+        self.EMBaudCbx = ttk.Combobox(self.frame3a, width=6, values=[50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200]) 
+        self.EMBaudCbx.set(config['EM']['Baud'])
+        self.EMBaudCbx.bind('<<ComboboxSelected>>', self.onSelectBaudEM)
 
         self.EMLab = ttk.Label(self.frame3a, text="Port") 
-        self.EMLab.grid(row=1, column = 0, padx=5, pady=6)
         self.EMCbBx = ttk.Combobox(self.frame3a, width=15)
+
         self.EMCbBx.set(config['EM']['Address'])
-        config['EM']['Baud'] = '38400' #fixme
 
         self.EMCbBx.bind('<<ComboboxSelected>>', self.onSelectAddressEM)
-        self.EMCbBx.grid(row=1, column = 1, padx=5, pady=6)
         self.EMDescLab = ttk.Label(self.frame3a, text="") 
 
-        self.EMDescLab.grid(row=1, column = 2, padx=5, sticky=tk.W+tk.E, columnspan=6)
+        self.doEMUI(self.frame3a)
 
-        frame3b = ttk.Frame(frame3)
+        frame3b = ttk.Frame(self.frame3)
         frame3b.grid(row=1, column = 0, columnspan=8, sticky=tk.W + tk.E)
         TempLab = ttk.Label(frame3b, text="Temperature") 
         TempLab.grid(row=0, column = 0, pady=6)
@@ -196,46 +208,46 @@ class EMApp(ttk.Frame):
         self.EMTemperature = ttk.Label(frame3b, textvariable=self.EM_TemperatureVal) 
         self.EMTemperature.grid(row=0, column = 1, padx=5, pady=6)
 
-        self.D025Lab = ttk.Label(frame3, text="025") 
+        self.D025Lab = ttk.Label(self.frame3, text="025") 
         self.D025Lab.grid(row=2, column = 0, pady=5)
         self.EM_PRPHVal = tk.DoubleVar()
         self.EM_PRPHIVal = tk.DoubleVar()
-        D025Ent = ttk.Entry(frame3, textvariable=self.EM_PRPHVal, width=8) 
+        D025Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRPHVal, width=8) 
         D025Ent.grid(row=2, column = 1, pady=5)
         
-        self.D05Lab = ttk.Label(frame3, text="05") 
+        self.D05Lab = ttk.Label(self.frame3, text="05") 
         self.D05Lab.grid(row=2, column = 2, pady=5)
         self.EM_PRP1Val = tk.DoubleVar()
         self.EM_PRPI1Val = tk.DoubleVar()
-        D05Ent = ttk.Entry(frame3, textvariable=self.EM_PRP1Val, width=8) 
+        D05Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRP1Val, width=8) 
         D05Ent.grid(row=2, column = 3, pady=5)
 
-        self.D10Lab = ttk.Label(frame3, text="10") 
+        self.D10Lab = ttk.Label(self.frame3, text="10") 
         self.D10Lab.grid(row=2, column = 4, pady=5)
         self.EM_PRP2Val = tk.DoubleVar()
         self.EM_PRPI2Val = tk.DoubleVar()
-        D10Ent = ttk.Entry(frame3, textvariable=self.EM_PRP2Val, width=8) 
+        D10Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRP2Val, width=8) 
         D10Ent.grid(row=2, column = 5, pady=5)
 
-        self.D075Lab = ttk.Label(frame3, text="075") 
+        self.D075Lab = ttk.Label(self.frame3, text="075") 
         self.D075Lab.grid(row=3, column = 0, pady=5)
         self.EM_HCPHVal = tk.DoubleVar()
         self.EM_HCPIHVal = tk.DoubleVar()
-        D075Ent = ttk.Entry(frame3, textvariable=self.EM_HCPHVal, width=8) 
+        D075Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCPHVal, width=8) 
         D075Ent.grid(row=3, column = 1, pady=5)
         
-        self.D15Lab = ttk.Label(frame3, text="15") 
+        self.D15Lab = ttk.Label(self.frame3, text="15") 
         self.D15Lab.grid(row=3, column = 2, pady=5)
         self.EM_HCP1Val = tk.DoubleVar()
         self.EM_HCPI1Val = tk.DoubleVar()
-        D15Ent = ttk.Entry(frame3, textvariable=self.EM_HCP1Val, width=8) 
+        D15Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCP1Val, width=8) 
         D15Ent.grid(row=3, column = 3, pady=5)
 
-        self.D30Lab = ttk.Label(frame3, text="30") 
+        self.D30Lab = ttk.Label(self.frame3, text="30") 
         self.D30Lab.grid(row=3, column = 4, pady=5)
         self.EM_HCP2Val = tk.DoubleVar()
         self.EM_HCPI2Val = tk.DoubleVar()
-        D30Ent = ttk.Entry(frame3, textvariable=self.EM_HCP2Val, width=8) 
+        D30Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCP2Val, width=8) 
         D30Ent.grid(row=3, column = 5, pady=5)
 
        # Undisplayed 
@@ -344,6 +356,10 @@ class EMApp(ttk.Frame):
             self.GPSLstBx.grid(row=1, column = 1, padx=5, pady=6)
             self.GPSDescLab.grid(row=1, column = 2, padx=5, pady=6, sticky=tk.E+tk.W)
 
+            self.GPSBaudLab.grid(row=0, column = 2, padx=5, pady=6)
+            self.GPSBaudCbx.grid(row=0, column = 3, padx=5, pady=6)
+            self.GPSBaudCbx.set(config['GPS1']['Baud'])
+
         if (config['GPS1']['Mode'] == "Bluetooth"):
             currentBTNames = self.getAddresses("Bluetooth")
 #            if (config['GPS1']['Address'] not in currentBTNames):
@@ -363,6 +379,21 @@ class EMApp(ttk.Frame):
             #else:
             #    self.GPSDescLab.configure(text="")
             #self.GPSLstBx.configure(values = getAddresses( value ))
+
+    def doEMUI(self, w):
+        for c in w.winfo_children():
+            c.grid_forget()
+
+        self.EMModeLab.grid(row=0, column = 0, padx=5, pady=6)
+        self.EMModeCbBx.grid(row=0, column = 1, padx=5, pady=6)
+        if (config['EM']['Mode'] == "Serial"):
+            self.EMBaudLab.grid(row=0, column = 2, padx=5, pady=6)
+            self.EMBaudCbx.grid(row=0, column = 3, padx=5, pady=6)
+            self.EMBaudCbx.set(config['EM']['Baud'])
+
+        self.EMLab.grid(row=1, column = 0, padx=5, pady=6)
+        self.EMCbBx.grid(row=1, column = 1, padx=5, pady=6)
+        self.EMDescLab.grid(row=1, column = 2, padx=5, sticky=tk.W+tk.E, columnspan=6)
 
     def onSelectModeGPS(self, evt):
         value = "Undefined"
@@ -413,6 +444,7 @@ class EMApp(ttk.Frame):
             pass
         with lock:
             config['EM']['Mode'] = value
+        self.doEMUI(self.frame3a)
         if (value == "Serial"):
             currentCOMPorts = self.getAddresses("Serial")
             self.EMCbBx.configure(values = currentCOMPorts)
@@ -464,6 +496,28 @@ class EMApp(ttk.Frame):
         self.lastEMTime = datetime.datetime.now() 
         self.saveConfig()
         self.clearMessage()
+
+    def onSelectBaudEM(self, evt):
+        value = "38400"
+        try:
+            value = evt.widget.get()
+        except:
+            pass
+        with lock:
+            config['EM']['Baud'] = value
+        self.restartEMFlag.set()
+        self.saveConfig()
+
+    def onSelectBaudGPS(self, evt):
+        value = "38400"
+        try:
+            value = evt.widget.get()
+        except:
+            pass
+        with lock:
+            config['GPS1']['Baud'] = value
+        self.restartGPS1Flag.set()
+        self.saveConfig()
 
     def onHistBtnPressed(self):
         self.frame4.configure(text="Histogram")
@@ -870,10 +924,9 @@ class EMApp(ttk.Frame):
             s.settimeout(5)
 
         elif (cfg['Mode'] == "Serial"):
-            baudrate = 38400
-            if hasattr(cfg, 'Baud'):
-                baudrate = int(cfg['Baud'])
-            s = serial.Serial(cfg['Address'], baudrate= baudrate, timeout=5, write_timeout=5)
+            port = cfg['Address']
+            baudrate = int(cfg['Baud'])
+            s = serial.Serial(port, baudrate= baudrate, timeout=5, write_timeout=5)
         else:
             raise Exception("Unknown mode '" + cfg['Mode'] + "'")
         return s
@@ -881,7 +934,7 @@ class EMApp(ttk.Frame):
     # Decode a nmea string and set the associated TCL variable
     def nmea_decode(self, linedata, useGPS = True):
         splitlines = linedata.split(',')
-        #print(splitlines)
+        print(splitlines)
         if useGPS and len(splitlines) >= 10 and ("GPGGA" in splitlines[0] or "GNGGA" in splitlines[0]):
             S = decimal_degrees(*dm(float(splitlines[2])))
             if splitlines[3].find('S') >= 0:
@@ -1110,6 +1163,9 @@ class EMApp(ttk.Frame):
                     except:
                         pass
         else:
+
+            self.BTPortDescriptions['00:12:6f:00:c1:fb'] = "DualEM278 long"
+            self.BTPortDescriptions['34:c9:f0:86:62:9a'] = "DualEM292 short"
             self.BTPortDescriptions['b8:d6:1a:0d:9a:22'] = "Facet Rover-9A22"
             self.BTPortDescriptions['dd:ee:ff:aa:bb:cc'] = "Sample BT 1 (garbage)"
 
