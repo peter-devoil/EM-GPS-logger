@@ -13,11 +13,11 @@ The script is in the R Processing toolbox/
 
 Set your input csv data by choosing the "Select Input" icon with 3 dots on the right and finding the csv file. The spanner icon gives you an option turn off invalid feature filtering (which will be needed with early files). Check the boom position (right distance & trailing) matches yours.
 
+There is an option to remove repeat observations where the buggy stopped (>10 points within a circle).
+
+The diameter of this circle is the distance to consider "stopped" - points within this distance are grouped together and all bar the central (in time) observation are removed.
+
 Your output data should appear as a set of points where the buggy was driven. 
-
-There is an option to remove repeat observations where the buggy stopped (>5s of no movement).
-
-Associated is the distance to consider "stopped" - points within this distance are grouped together and all bar the central (in time) observation are removed.
 
 At this point, it is worth examining the points created to be sure that we're ready to progress. Using a colour gradient to identify time since the start of the run (TimeSinceStart) can highlight where the GPS tracking signal is reversing direction.
 
@@ -28,4 +28,4 @@ Another script ("Clipping ... ") will clip the observations to the inside of the
 TBD
 
 ### The pipeline (R)
-Two scripts equivalent to the above are written. Parameters are at the top of the file. The first script (Offset) creates a shapefile (.shp). The second a (Clipped.shp) file.
+Two scripts equivalent to the above are available. Parameters are at the top of the file. The first script (Offset) creates a shapefile (.shp). The second a (.Clipped.shp) file.
