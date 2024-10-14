@@ -723,7 +723,7 @@ class EMApp(ttk.Frame):
                the_file.write('YYYY-MM-DD,HH:MM:SS.F,Plot,Longitude 1,Latitude 1,Height 1,EM_PRP0,EM_PRP1,EM_PRP2,EM_PRPH,EM_HCP0,EM_HCP1,EM_HCP2,EM_HCPH,EM_PRPI0,EM_PRPI1,EM_PRPI2,EM_PRPIH,EM_HCPI0,EM_HCPI1,EM_HCPI2,EM_HCPIH,EM_Volts,EM_Temperature,EM_Pitch,EM_Roll,Operator=' + str(self.operator.get()) + '\n')
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
         line = time_now + "," + self.SeqVal.get() + "," +\
-            str(self.X1Val.get()) + "," + str(self.Y1Val.get()) + "," + str(self.H1Val.get()) + "," + \
+            str(self.X1Val.get()) + "," + str(self.Y1Val.get()) + "," + str(self.H1Val.get()) + \
             self.getE1() + \
             '\n'
 
