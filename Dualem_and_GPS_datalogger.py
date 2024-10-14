@@ -179,7 +179,7 @@ class EMApp(ttk.Frame):
         self.frame3.grid(row=2, column = 0, columnspan=2, sticky=tk.W+tk.E+tk.S)
         
         self.frame3a = ttk.Frame(self.frame3)
-        self.frame3a.grid(row=0, column = 0, columnspan=8, sticky=tk.W+tk.E)
+        self.frame3a.grid(row=0, column = 0, columnspan=10, sticky=tk.W+tk.E)
         self.EMModeLab = ttk.Label(self.frame3a, text="Mode") 
         self.EMModeCbBx = ttk.Combobox(self.frame3a, values=["Undefined", "Bluetooth", "Serial"], width=15)
         self.EMModeCbBx.set(config['EM']['Mode'])
@@ -201,54 +201,68 @@ class EMApp(ttk.Frame):
         self.doEMUI(self.frame3a)
 
         frame3b = ttk.Frame(self.frame3)
-        frame3b.grid(row=1, column = 0, columnspan=8, sticky=tk.W + tk.E)
+        frame3b.grid(row=1, column = 0, columnspan=10, sticky=tk.W + tk.E)
         TempLab = ttk.Label(frame3b, text="Temperature") 
         TempLab.grid(row=0, column = 0, pady=6)
         self.EM_TemperatureVal= tk.DoubleVar()
         self.EMTemperature = ttk.Label(frame3b, textvariable=self.EM_TemperatureVal) 
         self.EMTemperature.grid(row=0, column = 1, padx=5, pady=6)
 
-        self.D025Lab = ttk.Label(self.frame3, text="025") 
-        self.D025Lab.grid(row=2, column = 0, pady=5)
+        self.PRPHLab = ttk.Label(self.frame3, text="PRPH") 
+        self.PRPHLab.grid(row=2, column = 0, pady=5)
         self.EM_PRPHVal = tk.DoubleVar()
         self.EM_PRPHIVal = tk.DoubleVar()
-        D025Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRPHVal, width=8) 
-        D025Ent.grid(row=2, column = 1, pady=5)
+        PRPHEnt = ttk.Entry(self.frame3, textvariable=self.EM_PRPHVal, width=8) 
+        PRPHEnt.grid(row=2, column = 1, pady=5)
         
-        self.D05Lab = ttk.Label(self.frame3, text="05") 
-        self.D05Lab.grid(row=2, column = 2, pady=5)
+        self.PRP0Lab = ttk.Label(self.frame3, text="PRP0") 
+        self.PRP0Lab.grid(row=2, column = 2, pady=5)
+        self.EM_PRP0Val = tk.DoubleVar()
+        self.EM_PRPI0Val = tk.DoubleVar()
+        PRP0Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRP0Val, width=8) 
+        PRP0Ent.grid(row=2, column = 3, pady=5)
+
+        self.PRP1Lab = ttk.Label(self.frame3, text="PRP1") 
+        self.PRP1Lab.grid(row=2, column = 4, pady=5)
         self.EM_PRP1Val = tk.DoubleVar()
         self.EM_PRPI1Val = tk.DoubleVar()
-        D05Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRP1Val, width=8) 
-        D05Ent.grid(row=2, column = 3, pady=5)
+        PRP1Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRP1Val, width=8) 
+        PRP1Ent.grid(row=2, column = 5, pady=5)
 
-        self.D10Lab = ttk.Label(self.frame3, text="10") 
-        self.D10Lab.grid(row=2, column = 4, pady=5)
+        self.PRP2Lab = ttk.Label(self.frame3, text="PRP2") 
+        self.PRP2Lab.grid(row=2, column = 6, pady=5)
         self.EM_PRP2Val = tk.DoubleVar()
         self.EM_PRPI2Val = tk.DoubleVar()
-        D10Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRP2Val, width=8) 
-        D10Ent.grid(row=2, column = 5, pady=5)
+        PRP2Ent = ttk.Entry(self.frame3, textvariable=self.EM_PRP2Val, width=8) 
+        PRP2Ent.grid(row=2, column = 7, pady=5)
 
-        self.D075Lab = ttk.Label(self.frame3, text="075") 
-        self.D075Lab.grid(row=3, column = 0, pady=5)
+        self.HCPHLab = ttk.Label(self.frame3, text="HCPH") 
+        self.HCPHLab.grid(row=3, column = 0, pady=5)
         self.EM_HCPHVal = tk.DoubleVar()
         self.EM_HCPIHVal = tk.DoubleVar()
-        D075Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCPHVal, width=8) 
-        D075Ent.grid(row=3, column = 1, pady=5)
+        HCPHEnt = ttk.Entry(self.frame3, textvariable=self.EM_HCPHVal, width=8) 
+        HCPHEnt.grid(row=3, column = 1, pady=5)
         
-        self.D15Lab = ttk.Label(self.frame3, text="15") 
-        self.D15Lab.grid(row=3, column = 2, pady=5)
+        self.HCP0Lab = ttk.Label(self.frame3, text="HCP0") 
+        self.HCP0Lab.grid(row=3, column = 2, pady=5)
+        self.EM_HCP0Val = tk.DoubleVar()
+        self.EM_HCPI0Val = tk.DoubleVar()
+        HCP0Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCP0Val, width=8) 
+        HCP0Ent.grid(row=3, column = 3, pady=5)
+
+        self.HCP1Lab = ttk.Label(self.frame3, text="HCP1") 
+        self.HCP1Lab.grid(row=3, column = 4, pady=5)
         self.EM_HCP1Val = tk.DoubleVar()
         self.EM_HCPI1Val = tk.DoubleVar()
-        D15Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCP1Val, width=8) 
-        D15Ent.grid(row=3, column = 3, pady=5)
+        HCP1Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCP1Val, width=8) 
+        HCP1Ent.grid(row=3, column = 5, pady=5)
 
-        self.D30Lab = ttk.Label(self.frame3, text="30") 
-        self.D30Lab.grid(row=3, column = 4, pady=5)
+        self.HCP2Lab = ttk.Label(self.frame3, text="HCP2") 
+        self.HCP2Lab.grid(row=3, column = 6, pady=5)
         self.EM_HCP2Val = tk.DoubleVar()
         self.EM_HCPI2Val = tk.DoubleVar()
-        D30Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCP2Val, width=8) 
-        D30Ent.grid(row=3, column = 5, pady=5)
+        HCP2Ent = ttk.Entry(self.frame3, textvariable=self.EM_HCP2Val, width=8) 
+        HCP2Ent.grid(row=3, column = 7, pady=5)
 
        # Undisplayed 
         self.TrackVal= tk.DoubleVar()
@@ -267,7 +281,7 @@ class EMApp(ttk.Frame):
         self.chartBtnTrack = ttk.Button(self.chartButtonFrame, text="Track", command = self.onTrackBtnPressed)
         self.chartBtnHist = ttk.Button(self.chartButtonFrame, text="Histogram", command = self.onHistBtnPressed)
         self.chartCombo = ttk.Combobox(self.chartButtonFrame, width=6,
-                                       values=['PRPH', 'PRP1', 'PRP2', 'HCPH', 'HCP1', 'HCP2'])
+                                       values=['PRPH', 'PRP0', 'PRP1', 'PRP2', 'HCPH', 'HCP0', 'HCP1', 'HCP2'])
         self.chartCombo.bind('<<ComboboxSelected>>', self.onSelectChartHist)
         self.chartCombo.set('PRPH')
         self.chartBtnTrack.grid(row=0, column = 0, padx=5, pady=5)
@@ -613,7 +627,7 @@ class EMApp(ttk.Frame):
     def startLogging(self):
         if not os.path.exists(self.saveFile.get()):
             with open(self.saveFile.get(), 'w') as the_file:
-               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP1,EM PRP2,EM PRPH,EM HCP1,EM HCP2,EM HCPH,EM PRPI1,EM PRPI2,EM PRPIH,EM HCPI1,EM HCPI2,EM HPCIH,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator.get()) + '\n')
+               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM PRPH,EM HCP0,EM HCP1,EM HCP2,EM HCPH,EM PRPI0,EM PRPI1,EM PRPI2,EM PRPIH,EM HCPI0,EM HCPI1,EM HCPI2,EM HPCIH,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator.get()) + '\n')
         self.doLogging()
 
     def pauseLogging(self):
@@ -680,10 +694,10 @@ class EMApp(ttk.Frame):
         sys.exit(0)
 
     def getE1(self):
-        return("," + str(self.EM_PRP1Val.get()) + "," + str(self.EM_PRP2Val.get()) + "," + str(self.EM_PRPHVal.get())+ \
-                "," + str(self.EM_HCP1Val.get()) + "," + str(self.EM_HCP2Val.get()) + "," + str(self.EM_HCPHVal.get()) + \
-                "," + str(self.EM_PRPI1Val.get()) + "," + str(self.EM_PRPI2Val.get()) + "," + str(self.EM_PRPHIVal.get()) + \
-                "," + str(self.EM_HCPI1Val.get()) + "," + str(self.EM_HCPI2Val.get()) + "," + str(self.EM_HCPIHVal.get()) + \
+        return("," + str(self.EM_PRP0Val.get()) + "," + str(self.EM_PRP1Val.get()) + "," + str(self.EM_PRP2Val.get()) + "," + str(self.EM_PRPHVal.get())+ \
+                "," + str(self.EM_HCP0Val.get()) + "," + str(self.EM_HCP1Val.get()) + "," + str(self.EM_HCP2Val.get()) + "," + str(self.EM_HCPHVal.get()) + \
+                "," + str(self.EM_PRPI0Val.get()) + "," + str(self.EM_PRPI1Val.get()) + "," + str(self.EM_PRPI2Val.get()) + "," + str(self.EM_PRPHIVal.get()) + \
+                "," + str(self.EM_HCPI0Val.get()) + "," + str(self.EM_HCPI1Val.get()) + "," + str(self.EM_HCPI2Val.get()) + "," + str(self.EM_HCPIHVal.get()) + \
                 "," + str(self.EM_VoltsVal.get()) + "," + str(self.EM_TemperatureVal.get()) + \
                 "," + str(self.EM_PitchVal.get()) + "," + str(self.EM_RollVal.get()))
 
@@ -699,14 +713,14 @@ class EMApp(ttk.Frame):
             the_file.write(line)
             the_file.flush()
         self.markTrack(self.X1Val.get(), self.Y1Val.get())
-        self.recordEM(self.EM_PRPHVal.get(),self.EM_PRP1Val.get(), self.EM_PRP2Val.get(), 
-                       self.EM_HCPHVal.get(), self.EM_HCP1Val.get(), self.EM_HCP2Val.get())
+        self.recordEM(self.EM_PRPHVal.get(),self.EM_PRP0Val.get(),self.EM_PRP1Val.get(), self.EM_PRP2Val.get(), 
+                       self.EM_HCPHVal.get(),self.EM_HCP0Val.get(),self.EM_HCP1Val.get(), self.EM_HCP2Val.get())
 
     # Write to the plot file 
     def doitPlot(self):
         if not os.path.exists(self.savePlotFile.get()):
             with open(self.savePlotFile.get(), 'w') as the_file:
-               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Plot,Longitude 1,Latitude 1,Height 1,E1_PRP1,E1_PRP2,E1_PRPH,E1_HCP1,E1_HCP2,E1_HCPH,E1_PRPI1,E1_PRPI2,E1_PRPIH,E1_HCPI1,E1_HCPI2,E1_HCPIH,E1_Volts,E1_Temperature,E1_Pitch,E1_Roll,Operator=' + str(self.operator.get()) + '\n')
+               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Plot,Longitude 1,Latitude 1,Height 1,EM_PRP0,EM_PRP1,EM_PRP2,EM_PRPH,EM_HCP0,EM_HCP1,EM_HCP2,EM_HCPH,EM_PRPI0,EM_PRPI1,EM_PRPI2,EM_PRPIH,EM_HCPI0,EM_HCPI1,EM_HCPI2,EM_HCPIH,EM_Volts,EM_Temperature,EM_Pitch,EM_Roll,Operator=' + str(self.operator.get()) + '\n')
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
         line = time_now + "," + self.SeqVal.get() + "," +\
             str(self.X1Val.get()) + "," + str(self.Y1Val.get()) + "," + str(self.H1Val.get()) + "," + \
@@ -718,8 +732,8 @@ class EMApp(ttk.Frame):
             the_file.flush()
 
         self.markTrack(self.X1Val.get(), self.Y1Val.get(), forceRedraw = True)
-        self.recordEM(self.EM_PRPHVal.get(),self.EM_PRP1Val.get(), self.EM_PRP2Val.get(), 
-                       self.EM_HCPHVal.get(), self.EM_HCP1Val.get(), self.EM_HCP2Val.get(), forceRedraw = True)
+        self.recordEM(self.EM_PRPHVal.get(),self.EM_PRP0Val.get(), self.EM_PRP1Val.get(), self.EM_PRP2Val.get(), 
+                       self.EM_HCPHVal.get(), self.EM_HCP0Val.get(), self.EM_HCP1Val.get(), self.EM_HCP2Val.get(), forceRedraw = True)
 
     def clearTracks(self):
         self.coords = []
@@ -737,11 +751,13 @@ class EMApp(ttk.Frame):
             self.canvas.delete(id)
 
     # record an EM sample
-    def recordEM(self, EM_PRPHVal,EM_PRP1Val, EM_PRP2Val, EM_HCPHVal, EM_HCP1Val, EM_HCP2Val, forceRedraw = False):
+    def recordEM(self, EM_PRPHVal,EM_PRP0Val, EM_PRP1Val, EM_PRP2Val, EM_HCPHVal, EM_HCP0Val, EM_HCP1Val, EM_HCP2Val, forceRedraw = False):
         self.EMRec['PRPH'].append(EM_PRPHVal)
+        self.EMRec['PRP0'].append(EM_PRP0Val)
         self.EMRec['PRP1'].append(EM_PRP1Val)
         self.EMRec['PRP2'].append(EM_PRP2Val)
         self.EMRec['HCPH'].append(EM_HCPHVal)
+        self.EMRec['HCP0'].append(EM_HCP0Val)
         self.EMRec['HCP1'].append(EM_HCP1Val)
         self.EMRec['HCP2'].append(EM_HCP2Val)
         if (self.chartMode == "Histogram"):
@@ -857,9 +873,11 @@ class EMApp(ttk.Frame):
         print("Cleared EM hist")
         self.EMRec = defaultdict(list)
         self.EMRec['PRPH'] = []
+        self.EMRec['PRP0']= []
         self.EMRec['PRP1']= []
         self.EMRec['PRP2']= []
         self.EMRec['HCPH']= []
+        self.EMRec['HCP0']= []
         self.EMRec['HCP1']= []
         self.EMRec['HCP2']= []
         self.hist_bar = None
@@ -959,6 +977,13 @@ class EMApp(ttk.Frame):
                     self.TrackVal.set(T)
                     self.SpeedVal.set(S)
                     #print("Track= " + str(T))
+            return 1
+        elif len(splitlines) >= 6 and "PDLM0" in splitlines[0]:
+            with lock:
+                self.EM_HCP0Val.set(splitlines[2])   #HCP conductivity in mS/m
+                self.EM_HCPI0Val.set(splitlines[3])  #HCP inphase in ppt
+                self.EM_PRP0Val.set(splitlines[4])   #PRP conductivity in mS/m
+                self.EM_PRPI0Val.set(splitlines[5].split('*')[0]) #PRP inphase in ppt
             return 1
         elif len(splitlines) >= 6 and "PDLM1" in splitlines[0]:
             with lock:
@@ -1064,6 +1089,10 @@ class EMApp(ttk.Frame):
             else:
                 self.restartEMFlag.clear()
                 while "EM" in self.errMsgSource: self.errMsgSource.remove("EM")
+                self.EM_HCP0Val.set(0.0)
+                self.EM_HCPI0Val.set(0.0)
+                self.EM_PRP0Val.set(0.0)
+                self.EM_PRPI0Val.set(0.0)
                 self.EM_HCP1Val.set(0.0)
                 self.EM_HCPI1Val.set(0.0)
                 self.EM_PRP1Val.set(0.0)
