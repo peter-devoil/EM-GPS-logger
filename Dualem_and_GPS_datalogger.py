@@ -30,6 +30,8 @@ if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
     config['IP'] = {'Recent' : "10.0.0.1:5017" }
     config['Serial'] = {'Recent' : "COM1,COM4" }
     config['Bluetooth'] = {'Recent' : "Facet Rover-9A22" }
+    config['Output'] = {'Frequency' : 2}
+
 else:
     config.read('Dualem_and_GPS_datalogger.ini')
 
@@ -38,6 +40,12 @@ else:
 
     if not config.has_option('EM', 'Baud'):
         config['EM']['Baud'] = "38400"
+
+    if not config.has_section('Output'):
+        config.add_section('Output')
+
+    if not config.has_option('Output','Frequency'):
+        config['Output']['Frequency'] = "2"
 
 lock = threading.Lock()
 
@@ -312,22 +320,35 @@ class EMApp(ttk.Frame):
         SDButtonDown.grid(row=1, column = 2, pady=5, padx=10, sticky=tk.W)
 
         frame6 = ttk.Frame(self)
-        frame6.grid(row=4, column = 0, columnspan=4, sticky=tk.W+tk.E)
+        frame6.grid(row=4, column = 0, columnspan=6, sticky=tk.W+tk.E)
+
+        frame6a = ttk.Frame(frame6)
+        frame6a.grid(row=0, column = 0, pady=5, padx=10)
+        outFreqLab = ttk.Label(frame6a, text="Out Freq")
+        outFreqLab.grid(row=0, column = 0, padx=2)
+
+        self.OutputFrequency = tk.IntVar()
+        self.OutputFrequency.set(config['Output']['Frequency'])
+        outFreq = ttk.Entry(frame6a, textvariable=self.OutputFrequency, width=3)
+        outFreq.grid(row=0, column = 1, padx=2)
+
+        outFreqUnitLab = ttk.Label(frame6a, text="Hz")
+        outFreqUnitLab.grid(row=0, column = 2, padx=2)
 
         # When set, fires a regular reading to the continuous file
         self.running = None
         self.StartPauseBtn = ttk.Button(frame6, text="Start", command=self.startOrPause)
-        self.StartPauseBtn.grid(row=0, column = 0, pady=5, padx=10)
+        self.StartPauseBtn.grid(row=0, column = 1, pady=5, padx=10)
 
         ExitBtn = ttk.Button(frame6, text="Exit", command=self.shutDown)
-        ExitBtn.grid(row=0, column = 1, pady=5, padx=10)
+        ExitBtn.grid(row=0, column = 2, pady=5, padx=10)
 
         self.errMsg = ttk.Label(self, text="", font = ('Verdana',20) )
         self.errMsgText = ""
         self.errMsgSource = []
         self.lastErrorTime = datetime.datetime.now() - datetime.timedelta(seconds=30)
 
-        self.pack()
+        self.grid()
         self.clearTracks()
         self.clearEMRec()
         self.onTrackBtnPressed()
@@ -684,10 +705,26 @@ class EMApp(ttk.Frame):
         self.monitor = root.after(250, self.doMonitor)
 
     def doLogging(self):
+        t0 = datetime.datetime.now()
         self.doit()
-        self.running = root.after(500, self.doLogging)
+        OutputFrequency = 2.0
+        try:
+            OutputFrequency = float(self.OutputFrequency.get())
+        except:
+            pass
+        if (OutputFrequency <= 0):
+            OutputFrequency = 2
+        freqMs = 1000.0 * 1.0 / OutputFrequency
+        delayMs = 0
+        t1 = t0 + datetime.timedelta(milliseconds=freqMs)
+        if (t1 > datetime.datetime.now()):
+            delayDt =  t1 - datetime.datetime.now()
+            delayMs = max(0, int(delayDt.total_seconds() * 1000.0))
+        #print("d = ", delayMs)
+        self.running = root.after(delayMs, self.doLogging)
 
     def shutDown(self):
+        self.saveConfig()
         self.stopFlag.set()
         global root
         root.destroy()
@@ -952,7 +989,7 @@ class EMApp(ttk.Frame):
     # Decode a nmea string and set the associated TCL variable
     def nmea_decode(self, linedata, useGPS = True):
         splitlines = linedata.split(',')
-        print(splitlines)
+        #print(splitlines)
         if useGPS and len(splitlines) >= 10 and ("GPGGA" in splitlines[0] or "GNGGA" in splitlines[0]):
             S = decimal_degrees(*dm(float(splitlines[2])))
             if splitlines[3].find('S') >= 0:
@@ -1259,8 +1296,11 @@ class EMApp(ttk.Frame):
             if (not curr in old):
                 config['Bluetooth']["Recent"] = config['Bluetooth']["Recent"]+"," + curr
 
+        config['Output']['Frequency'] = str(self.OutputFrequency.get())
+
         with open('Dualem_and_GPS_datalogger.ini', 'w') as configfile:
             config.write(configfile)
+
 
 app = None
 root = None
@@ -1270,7 +1310,6 @@ def main():
     root.geometry("625x625+50+50")
     app = EMApp()
     root.protocol("WM_DELETE_WINDOW", app.shutDown)
-
     root.mainloop()
 
 if __name__ == '__main__':
