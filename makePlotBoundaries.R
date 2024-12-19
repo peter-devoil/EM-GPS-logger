@@ -5,9 +5,10 @@ library("geosphere")
 # Generate plot boundaries. Laneways & buffers are unassigned
 
 # The top and bottom - left edge. 
-p1 <- c(152.331214756, -27.545051960)
-p2 <- c(152.33177956, -27.54629926) 
-  
+
+p1 <- c(152.33121288,-27.54503772)
+p2 <- c(152.331773296,-27.546300752) 
+
 # Plot width & length (m)
 pWidth<- 2
 pLength <- 6
@@ -37,8 +38,10 @@ id <- 1
 while(T) {
    # Generate a polygon of the plot boundaries
    if (!laneColumns[iCol] && !laneRows[iRow]) {
-      p <- destPoint(destPoint(p1, b, sum(rowLengths[1:iRow])), 
-                     b - 90, sum(colWidths[1:iCol]))
+      xoff <- ifelse(iRow == 1, 0, sum(rowLengths[1:(iRow-1)]))
+      yoff <- ifelse(iCol == 1, 0, sum(colWidths[1:(iCol-1)]))
+      p <- destPoint(destPoint(p1, b, xoff), b - 90, yoff)
+      
       plt1<- matrix(p, nrow=1)
       plt2<- destPoint(plt1, b, rowLengths[iRow])
       plt3<- destPoint(plt2, b - 90, colWidths[iCol])
