@@ -5,7 +5,6 @@ library("geosphere")
 # Generate plot boundaries. Laneways & buffers are unassigned
 
 # The top and bottom - left edge. 
-
 p1 <- c(152.33121288,-27.54503772)
 p2 <- c(152.331773296,-27.546300752) 
 
@@ -24,15 +23,18 @@ rowLengths <- rep(c(rep(pLength, 6), 2), 4)
 laneRows <- rep(c(rep(F, 6), T), 4)
 
 # Check
-stopifnot(length(colWidths) == length(colWidths))
+stopifnot(length(colWidths) == length(laneColumns))
+stopifnot(length(rowLengths) == length(laneRows))
 
 # Bearing in degrees north
 b <- bearing(p1, p2)  
 
 # Make a list of plots. 'id' is the NW:SE sequence number
 plots<- list()
-iRow <- 1;
+iRow <- 1; # the 'field' cell - includes laneways
 iCol <- 1;
+iPlotRow <- 1; # the 'experiment' cell - excludes laneways
+iPlotCol <- 1;
 id <- 1
 
 while(T) {
@@ -48,31 +50,38 @@ while(T) {
       plt4<- destPoint(plt1, b - 90, colWidths[iCol])
 
       poly <- do.call(rbind, list(plt1,plt2,plt3,plt4))
-      plots[[id]] <- cbind(poly, seq=1:4, id=id)
+      plots[[id]] <- cbind(poly, seq=1:4, id=id, 
+                           rowcol=paste0("R", iPlotRow, "C", iPlotCol))
       id <- id + 1
+      iPlotRow <- iPlotRow + 1
    }
   
    # Work out if we've reached the end of a row/column
    iRow <- iRow + 1
    if (iRow > length(rowLengths)) {
      iRow <- 1
+     iPlotRow <- 1
      iCol <- iCol + 1
      if (iCol > length(colWidths)) {
         break
+     }
+     if (! laneColumns[iCol])  {
+        iPlotCol <- iPlotCol + 1;
      }
    }
 }
 
 # Convert to spatial object
 result <- data.frame(do.call(rbind, plots)) %>%
+  mutate(id=as.numeric(id)) %>%
   sf::st_as_sf(coords = c("lon", "lat"), crs = "wgs84") %>%
-  group_by(id) %>%
+  group_by(id, rowcol) %>%
   arrange(seq) %>%
   summarize(do_union = FALSE) %>%
-  st_cast("POLYGON")
+  st_cast("POLYGON") 
 
 # Write
 write_sf(result, "makePlotBoundaries.shp")
 
-library(ggplot2)
-ggplot(result) + geom_sf()
+#library(ggplot2)
+#ggplot(result) + geom_sf(aes(fill=id))
