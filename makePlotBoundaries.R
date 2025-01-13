@@ -5,10 +5,6 @@ library("geosphere")
 # Generate plot boundaries. Laneways & buffers are unassigned
 
 # The top and bottom - left edge. 
-<<<<<<< HEAD
-=======
-
->>>>>>> 414cde1f2c135b067b85b7df3a3b224f981355d9
 p1 <- c(152.33121288,-27.54503772)
 p2 <- c(152.331773296,-27.546300752) 
 
@@ -27,27 +23,18 @@ rowLengths <- rep(c(rep(pLength, 6), 2), 4)
 laneRows <- rep(c(rep(F, 6), T), 4)
 
 # Check
-<<<<<<< HEAD
 stopifnot(length(colWidths) == length(laneColumns))
 stopifnot(length(rowLengths) == length(laneRows))
-=======
-stopifnot(length(colWidths) == length(colWidths))
->>>>>>> 414cde1f2c135b067b85b7df3a3b224f981355d9
 
 # Bearing in degrees north
 b <- bearing(p1, p2)  
 
 # Make a list of plots. 'id' is the NW:SE sequence number
 plots<- list()
-<<<<<<< HEAD
 iRow <- 1; # the 'field' cell - includes laneways
 iCol <- 1;
 iPlotRow <- 1; # the 'experiment' cell - excludes laneways
 iPlotCol <- 1;
-=======
-iRow <- 1;
-iCol <- 1;
->>>>>>> 414cde1f2c135b067b85b7df3a3b224f981355d9
 id <- 1
 
 while(T) {
@@ -63,62 +50,38 @@ while(T) {
       plt4<- destPoint(plt1, b - 90, colWidths[iCol])
 
       poly <- do.call(rbind, list(plt1,plt2,plt3,plt4))
-<<<<<<< HEAD
       plots[[id]] <- cbind(poly, seq=1:4, id=id, 
                            rowcol=paste0("R", iPlotRow, "C", iPlotCol))
       id <- id + 1
       iPlotRow <- iPlotRow + 1
-=======
-      plots[[id]] <- cbind(poly, seq=1:4, id=id)
-      id <- id + 1
->>>>>>> 414cde1f2c135b067b85b7df3a3b224f981355d9
    }
   
    # Work out if we've reached the end of a row/column
    iRow <- iRow + 1
    if (iRow > length(rowLengths)) {
      iRow <- 1
-<<<<<<< HEAD
      iPlotRow <- 1
-=======
->>>>>>> 414cde1f2c135b067b85b7df3a3b224f981355d9
      iCol <- iCol + 1
      if (iCol > length(colWidths)) {
         break
      }
-<<<<<<< HEAD
      if (! laneColumns[iCol])  {
         iPlotCol <- iPlotCol + 1;
      }
-=======
->>>>>>> 414cde1f2c135b067b85b7df3a3b224f981355d9
    }
 }
 
 # Convert to spatial object
 result <- data.frame(do.call(rbind, plots)) %>%
-<<<<<<< HEAD
   mutate(id=as.numeric(id)) %>%
   sf::st_as_sf(coords = c("lon", "lat"), crs = "wgs84") %>%
   group_by(id, rowcol) %>%
   arrange(seq) %>%
   summarize(do_union = FALSE) %>%
   st_cast("POLYGON") 
-=======
-  sf::st_as_sf(coords = c("lon", "lat"), crs = "wgs84") %>%
-  group_by(id) %>%
-  arrange(seq) %>%
-  summarize(do_union = FALSE) %>%
-  st_cast("POLYGON")
->>>>>>> 414cde1f2c135b067b85b7df3a3b224f981355d9
 
 # Write
 write_sf(result, "makePlotBoundaries.shp")
 
-<<<<<<< HEAD
 #library(ggplot2)
 #ggplot(result) + geom_sf(aes(fill=id))
-=======
-library(ggplot2)
-ggplot(result) + geom_sf()
->>>>>>> 414cde1f2c135b067b85b7df3a3b224f981355d9
