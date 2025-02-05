@@ -1,0 +1,24 @@
+{
+  "name": "screener",
+  "version": "1.0.0",
+  "description": "Screen EM datafiles",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "electron ."
+  },
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^34.0.0"
+  },
+  "dependencies": {
+    "bootstrap": "^5.3.3",
+    "csv2geojson": "^5.1.2",
+    "d3": "^7.9.0",
+    "file-selector": "^2.1.2",
+    "shpjs": "^6.1.0",
+    "split.js": "^1.6.5",
+    "xel": "^0.29.0"
+  }
+}
