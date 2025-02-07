@@ -54,7 +54,10 @@
            });
        }
 
-       function drawData(element, msgElement, selectedChannel) {
+       // keep these around for later..
+       var x = null;
+       var y = null;
+       function drawData(element, msgElement) {
               element.replaceChildren();
 
               if(emData == null) { return }
@@ -79,7 +82,7 @@
 
               var thisData = [];
               emData.features.forEach((feature) => {
-                     var x = feature.properties[selectedChannel];
+                     var x = feature.properties[emData.selectedChannel];
                      var value;
                      if (typeof x === 'string' || x instanceof String) 
                          value = parseFloat(x);
@@ -96,7 +99,7 @@
               }
 
               // X axis: scale and draw:
-              var x = d3.scaleLinear()
+              x = d3.scaleLinear()
                      .domain([d3.min(thisData), d3.max(thisData)])
                      .range([0, width]);
 
@@ -115,7 +118,7 @@
               var bins = histogram(thisData);
 
               // Y axis: scale and draw:
-              var y = d3.scaleLinear()
+              y = d3.scaleLinear()
                      .range([height, 0])
                      .domain([0,
                               d3.max(bins, function (d) { return d.length; })]);
@@ -137,7 +140,7 @@
               // draggable bounds
               const lowerBound = svg.append("g")
                      .append("rect")
-                     .attr("x", x(emData.lowerBounds[selectedChannel]))
+                     .attr("x", x(emData.lowerBounds[emData.selectedChannel]))
                      .attr("y", 0)
                      .attr("width", 2)
                      .attr("height", height)
@@ -151,7 +154,7 @@
 
               const upperBound = svg.append("g")
                      .append("rect")
-                     .attr("x", x(emData.upperBounds[selectedChannel]))
+                     .attr("x", x(emData.upperBounds[emData.selectedChannel]))
                      .attr("y", 0)
                      .attr("width", 2)
                      .attr("height", height)
@@ -165,12 +168,12 @@
               function dragging(what, event, d) {
                      var newX = x.invert(Math.max(0, Math.min(width, event.x)));
                      if (what == "upper") {
-                            emData.upperBounds[selectedChannel] = newX;
+                            emData.upperBounds[emData.selectedChannel] = newX;
                             svg
                                    .select("#" + what)
                                    .attr("x", x(newX))
                      } else if (what == "lower") {
-                            emData.lowerBounds[selectedChannel] = newX;
+                            emData.lowerBounds[emData.selectedChannel] = newX;
                             svg
                                    .select("#" + what)
                                    .attr("x", x(newX))
@@ -180,15 +183,36 @@
               showTextSummary(msgElement, thisData);
        }
 
+       // called when entry x.yyy is changed
+       function updateBounds(histElement, msgElement) {
+              var svg = d3.select(histElement)
+                     .selectChild('svg');
+              svg
+                     .select("#" + "lower")
+                     .attr("x", x(emData.lowerBounds[emData.selectedChannel]));
+              svg
+                     .select("#" + "upper")
+                     .attr("x", x(emData.upperBounds[emData.selectedChannel]));
+
+       }
+
        function showTextSummary(element, data) {
               const sum = arr => arr.reduce((partialSum, a) => partialSum + a, 0);
-              var numLow = sum(data.map(d => d < emData.lowerBounds[selectedChannel]));
+              var numLow = sum(data.map(d => d < emData.lowerBounds[emData.selectedChannel]));
               var pcntLow = Math.round(100 * numLow / data.length);
-              var numHigh = sum(data.map(d => d > emData.upperBounds[selectedChannel]));
+              var numHigh = sum(data.map(d => d > emData.upperBounds[emData.selectedChannel]));
               var pcntHigh = Math.round(100 * numHigh / data.length);
-              element.innerHTML = "Low = " + Math.round(emData.lowerBounds[selectedChannel]) +
-                ", n = " + numLow + " (" + pcntLow + "%) <br>High = " + 
-                Math.round(emData.upperBounds[selectedChannel]) + ", n = "  + numHigh + " (" + pcntHigh + "%) <br>";
+
+              document.querySelector('#lowBoundInput')
+                     .value = Math.round(emData.lowerBounds[emData.selectedChannel] * 100) / 100;  //??
+              document.querySelector('#lowBoundMsg')
+                     .innerHTML = "n screened = " + numLow + " (" + pcntLow + "%)";
+
+              document.querySelector('#highBoundInput')
+                     .value = Math.round(emData.upperBounds[emData.selectedChannel] * 100) / 100;
+              document.querySelector('#highBoundMsg')
+                     .innerHTML = "n screened = " + numHigh + " (" + pcntHigh + "%)";
+
               if (reColourFunction != null) {
                      reColourFunction();
               }
@@ -198,8 +222,9 @@
        exports.version = version;
        exports.loadEMData = loadEMData;
        exports.drawData = drawData;
-       exports.allData = emData;
+       exports.emData = emData;
        exports.setRecolour = setRecolour;
+       exports.updateBounds= updateBounds;
        
        Object.defineProperty(exports, '__esModule', { value: true });
 

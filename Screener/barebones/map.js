@@ -19,7 +19,7 @@
               plotData = _plotData;
        }
 
-       function drawData(element, selectedChannel) {
+       function drawData(element) {
               element.replaceChildren();
 
               width = element.offsetWidth;
@@ -116,13 +116,13 @@
               svg.call(d3.zoom().on('zoom', handleZoom)); 
        }
 
-       function recolourData(element, selectedChannel) {
+       function recolourData(element) {
               if (emData != null) {
                      d3.selectAll("circle")
                             .style("fill", (d) => {
-                                   if (d.properties[[selectedChannel]] < emData.lowerBounds[selectedChannel])
+                                   if (d.properties[[emData.selectedChannel]] < emData.lowerBounds[emData.selectedChannel])
                                           return("blue");
-                                   if (d.properties[[selectedChannel]] > emData.upperBounds[selectedChannel])
+                                   if (d.properties[[emData.selectedChannel]] > emData.upperBounds[emData.selectedChannel])
                                           return("red");
                                    return("purple");});
               }

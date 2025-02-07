@@ -32,7 +32,24 @@
               <div id="split-0">
                      <div class="d-flex flex-column">
                             <div class="histogram svg-container">&nbsp;Open EM data to<br>&nbsp;show histogram</div>
-                            <div class="messagebox">&nbsp;Messages appear here</div>
+                            <div class="messagebox">
+                                   <x-card>
+                                          <main>
+                                                 <strong>Low</strong>
+                                                 <x-box class="flex-row"><x-numberinput id="lowBoundInput" precision="2"><x-stepper></x-stepper></x-numberinput>
+                                                        <span id="lowBoundMsg">Messages appear here</span>
+                                                 </x-box>
+                                          </main>
+                                   </x-card>
+                                   <x-card>
+                                          <main>
+                                                 <strong>High</strong>
+                                                 <x-box><x-numberinput id="highBoundInput" precision="2"><x-stepper></x-stepper></x-numberinput>
+                                                        <span id="highBoundMsg">Messages appear here</span>
+                                                 </x-box>
+                                          </main>
+                                   </x-card>
+                            </div>
                      </div>
               </div>
               <div id="split-1">

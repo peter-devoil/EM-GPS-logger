@@ -8,7 +8,7 @@ var mapElement = document.querySelector('.map');
 var msgElement = document.querySelector(".messagebox")
 var split = Split(['#split-0', '#split-1'] /*, {onDragEnd: () => myHist.setupHist(histElement)}*/);
 
-var selectedChannel = "Undefined";
+//var selectedChannel = "Undefined";
 
 var emData = null;
 var plotData = null;
@@ -16,9 +16,9 @@ var plotData = null;
 document.querySelector('#channelSelector')
     .addEventListener('change', function () { 
         console.log("Change channelSelector: " + this.value);
-        selectedChannel = this.value;
-        myHist.drawData(histElement, msgElement, selectedChannel);
-        myMap.drawData(mapElement, selectedChannel);
+        emData.selectedChannel = this.value;
+        myHist.drawData(histElement, msgElement);
+        myMap.drawData(mapElement);
     }, false);
 
 // Get the EM data from a file. Can be either csv or shapefile
@@ -70,15 +70,16 @@ document.querySelector('#open_em_data')
 
     combo.selectedIndex = 0;
     combo.focusFirstMenuItem();
+    emData.selectedChannel = channels[0];
     var selector = document.getElementById("channelSelector");
-    selector.value = selectedChannel = channels[0];
+    selector.value = channels[0];
 
     myHist.loadEMData( emData );
-    myHist.drawData( histElement, msgElement, selectedChannel )
+    myHist.drawData( histElement, msgElement )
     
     myMap.loadEMData( emData );
-    myMap.drawData( mapElement, selectedChannel );
-    myMap.recolourData( mapElement, selectedChannel );
+    myMap.drawData( mapElement );
+    myMap.recolourData( mapElement );
 });
 
 // Get the plot outline data from a file
@@ -101,10 +102,24 @@ document.querySelector('#open_plot_data')
     
     plotData = await shp(shpBundle);
     myMap.loadPlotData( plotData );
-    myMap.drawData(mapElement, selectedChannel);
-    myMap.recolourData(mapElement, selectedChannel);
+    myMap.drawData(mapElement);
+    myMap.recolourData(mapElement);
 });
 
 myHist.setRecolour (function () { 
-    myMap.recolourData( mapElement, selectedChannel ); 
+    myMap.recolourData( mapElement); 
 });
+
+
+// Get the plot outline data from a file
+document.querySelector('#lowBoundInput')
+    .addEventListener('change', async(e) => { 
+        emData.lowerBounds[emData.selectedChannel] = e.target.value;
+        myHist.updateBounds( histElement, msgElement )
+    });
+
+document.querySelector('#highBoundInput')
+    .addEventListener('change', async(e) => { 
+        emData.upperBounds[emData.selectedChannel] = e.target.value;
+        myHist.updateBounds( histElement, msgElement )
+    });
