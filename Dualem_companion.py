@@ -1,10 +1,15 @@
 from collections import defaultdict
-#import serial
+from mavsdk import System
+from mavsdk import mission_raw
+from mavsdk import telemetry
+import asyncio
 import socket
 import os
-import platform
-import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
+import math
+import sys
+import types
 import threading
 import datetime
 import getpass
@@ -16,16 +21,15 @@ import configparser
 
 config = configparser.ConfigParser()
 if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
-    config['GPS1'] = {'Mode': 'IP', 'Address': '10.0.0.1:5017', 'Baud' : 4800}
-    config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
+    #config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
+    config['EM'] = {'Mode': 'Undefined', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
+    config['Drone'] = {'system_address': 'udp://:14540'}
+
     config['Operator'] = {'Name' : getpass.getuser()}
     config['Output'] = {'Frequency' : 2}
 
 else:
-    config.read('Dualem_and_GPS_datalogger.ini')
-
-    if not config.has_option('GPS1', 'Baud'):
-        config['GPS1']['Baud'] = "38400"
+    config.read('Dualem_companion.ini')
 
     if not config.has_option('EM', 'Baud'):
         config['EM']['Baud'] = "38400"
@@ -46,6 +50,56 @@ def dm(x):
 def decimal_degrees(degrees, minutes):
     return degrees + minutes/60 
 
+def MakeHandlerClassWithBakedInApp(app):
+   class Handler(BaseHTTPRequestHandler):
+       def __init__(self, *args, **kwargs):
+          self.emApp = app
+          super().__init__(*args, **kwargs)
+       
+       def do_GET(self):
+          self.send_response(200)
+          self.send_header("Content-type", "text/html")
+          self.end_headers()
+          self.wfile.write(bytes("<html><head><title>Robot Companion</title></head>", "utf-8"))
+          self.wfile.write(bytes("<body>", "utf-8"))
+          self.wfile.write(bytes("Status:<br/>" + self.emApp.StatusInfo() + "<br/>","utf-8"))
+          self.wfile.write(bytes("</body></html>", "utf-8"))
+
+   return Handler
+
+
+async def monitor_mission_progress(emApp, drone, mission_items):
+   async for p in drone.mission_raw.mission_progress():
+       if (p.current < len(mission_items)):
+           print(f"Mission progress: "
+               f"{p.current}/"
+               f"{p.total}" + ", cmd=" + str(mission_items[p.current].command))
+           if emApp != None and mission_items[p.current].command == 216:
+               if(mission_items[p.current].param1 > 0):
+                   emApp.Start()
+               else:
+                   emApp.Pause()
+
+async def monitor_gpsPos(emApp, drone):
+   async for p in drone.telemetry.position():
+       emApp.X1Val = p.longitude_deg
+       emApp.Y1Val = p.latitude_deg 
+       emApp.H1Val = p.absolute_altitude_m
+       emApp.lastGPSTime = datetime.datetime.now()
+
+async def monitor_gpsHead(emApp, drone):
+   async for p in drone.telemetry.heading():
+       emApp.TrackVal= p.heading_deg
+
+async def monitor_gpsVelocity(emApp, drone):
+   async for p in drone.telemetry.velocityned():
+       emApp.SpeedVal= math.sqrt(p.north_m_s * p.north_m_s + p.east_m_s * p.east_m_s + p.down_m_s * p.down_m_s)
+
+async def monitor_gpsQuality(emApp, drone):
+   async for p in drone.telemetry.gpsinfo():
+       emApp.GPSQuality = str(p.fix_type)
+
+
 ################## Initialisation here ##################
 
 class EMApp():
@@ -55,24 +109,21 @@ class EMApp():
         # Setting this flag will stop the reader threads
         self.stopFlag = threading.Event()
         self.restartEMFlag = threading.Event()
-        self.restartGPS1Flag = threading.Event()
 
-        self.numGPSErrors = 0
         self.numEMErrors = 0
         self.lastBellTime = datetime.datetime.now() #- datetime.timedelta(seconds=10)
     
         # Default filenames
         today = datetime.datetime.now().strftime("%d-%m-%Y")
-        self.saveFile = os.getcwd() + '/' + "EMXX.All." + today + ".csv"
+        self.saveFile = os.getcwd() + '/' + "EMXX.All." + today + ".csv"  # fixme use mission name
 
         self.operator = config['Operator']['Name']
-
-        self.IPAddress = config['GPS1']['Address']
     
+        self.X1Val = 0.0
+        self.Y1Val = 0.0
         self.H1Val = 0.0
-        self.GPSQualityVal = 0
+        self.GPSQuality = ""
 
-       # Undisplayed 
         self.TrackVal= 0.0
         self.SpeedVal= 0.0
         self.EM_VoltsVal= 0.0
@@ -86,47 +137,55 @@ class EMApp():
         self.errMsgSource = []
         self.lastErrorTime = datetime.datetime.now() - datetime.timedelta(seconds=30)
 
-        self.restartGPS1Flag.clear()
-        self.lastGPS1Time = datetime.datetime.now() 
-
         self.errMsgSource = []
 
         self.workers = []
-        self.thread1 = threading.Thread(target=self.gps1_read, args=('GPS1',), daemon = True)
-        self.thread1.start()
-        self.workers.append(self.thread1)
-        self.lastGPS1Time = datetime.datetime.now()
-
         self.EMThread = threading.Thread(target=self.em1_read, args=('EM',), daemon = True)
         self.EMThread.start()
         self.workers.append(self.EMThread)
         self.lastEMTime = datetime.datetime.now()
+        self.lastGPSTime = datetime.datetime.now()
 
         self.MonitorThread = threading.Thread(target=self.startMonitor, args=('Monitor',), daemon = True)
         self.MonitorThread.start()
         self.workers.append(self.MonitorThread)
-        
+
+        self.HttpThread = threading.Thread(target=self.startHTTPServer, args=('http',), daemon = True)
+        self.HttpThread.start()
+        self.workers.append(self.HttpThread)
+
+        self.DroneThread = threading.Thread(target=self.startDrone, args=('local',), daemon = True)
+        self.DroneThread.start()
+        self.workers.append(self.DroneThread)
+
         for w in self.workers:
               w.join()
 
-
     # toggle continuous operation on/off
-    def startOrPause(self):
-        #print("r=" + str(self.running != None))
+    def Start(self):
         if (self.running == None):
             self.startLogging()
-        else:
-            self.pauseLogging()
+
+    def Pause(self):
+        if (self.running != None):
+            self.running = None
+
+    def Status(self):
+        if (self.running == None):
+            return("Paused")
+        return("Running")
+        
+    def StatusInfo(self):
+        # fixme add drone info here
+        if (self.running != None):
+            return("EM: " + ("Error" if self.hasEMError else "Ok"))
+        return("Idle")
 
     def startLogging(self):
         if not os.path.exists(self.saveFile):
             with open(self.saveFile, 'w') as the_file:
                the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM HCP0,EM HCP1,EM HCP2,EM PRPI0,EM PRPI1,EM PRPI2,EM HCPI0,EM HCPI1,EM HCPI2,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator) + '\n')
         self.doLogging()
-
-    def pauseLogging(self):
-        if (self.running != None):
-            self.running = None
 
     def startMonitor(self, args):
         self.monitor = threading.Timer(0.250, self.doMonitor)
@@ -141,11 +200,10 @@ class EMApp():
                 while "EM" in self.errMsgSource: self.errMsgSource.remove("EM")
 
             if not self.hasGPSError() and \
-                    config['GPS1']['Mode'] != "Undefined" and \
-                    (datetime.datetime.now() - self.lastGPS1Time).total_seconds() > 5:
+                    config['GPS']['Mode'] != "Undefined" and \
+                    (datetime.datetime.now() - self.lastGPSTime).total_seconds() > 5:
                 print("GPS Timeout")
                 self.errMsgSource.append("GPS")
-                self.restartGPS1Flag.set()
 
             if not self.hasEMError() and \
                     config['EM']['Mode'] != "Undefined" and \
@@ -158,6 +216,76 @@ class EMApp():
             print("Monitor: " + e)
             pass
 
+    def startHTTPServer(self, args):
+       hostName = ""
+       serverPort = 8080
+       webServer = HTTPServer((hostName, serverPort), MakeHandlerClassWithBakedInApp(self))
+       print("Listening on http://%s:%s" % (hostName, serverPort))
+
+       try:
+          webServer.serve_forever()
+       except KeyboardInterrupt:
+          pass
+       webServer.server_close()
+
+
+    def startDrone(self, args):
+        print('Connecting to drone')
+        asyncio.run(self.initDrone())
+        
+    async def initDrone(self):
+        drone = System()
+        await drone.connect(system_address=config['Drone']['system_address'])
+
+        print("Waiting for drone to connect...")
+        async for state in drone.core.connection_state():
+            if state.is_connected:
+                print(f"-- Connected to drone!")
+                break
+        
+        # 1st test is always true *fixme* need to align this with powerup?
+        async for change in drone.mission_raw.mission_changed():
+            if change:
+                break
+            time.sleep(0.5)
+
+        while True:
+            print(f"-- Waiting for a new mission")
+            async for change in drone.mission_raw.mission_changed():
+                if change:
+                    break
+                time.sleep(0.5)
+
+            mission_items = await drone.mission_raw.download_mission()
+            print("-- Got mission (" + str(len(mission_items)) + " items)")
+
+            tasks = []
+            bound_function = types.MethodType(monitor_mission_progress, self)
+            tasks.append(asyncio.ensure_future( bound_function(drone, mission_items)))
+
+            bound_function = types.MethodType(monitor_gpsPos, self)
+            tasks.append(asyncio.ensure_future( bound_function(drone) ))
+
+            bound_function = types.MethodType(monitor_gpsHead, self)
+            tasks.append(asyncio.ensure_future( bound_function(drone) ))
+
+            bound_function = types.MethodType(monitor_gpsVelocity, self)
+            tasks.append(asyncio.ensure_future( bound_function(drone) ))
+
+            async for p in drone.mission_raw.mission_progress():
+                 if p.current >= p.total:
+                     break
+                 time.sleep(1)
+
+            print("-- Mission finished")
+
+            try:
+                 for t in tasks:
+                     t.cancel()
+            finally:
+                print("Unwound drone GPS callbacks")
+
+# Drone callbacks
     def doLogging(self):
         t0 = datetime.datetime.now()
         self.doit()
@@ -203,7 +331,7 @@ class EMApp():
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
         line = time_now +  "," + \
             str(self.X1Val) + "," + str(self.Y1Val) + "," + str(self.H1Val) + "," + \
-            str(self.SpeedVal) + "," + str(self.TrackVal) + "," + self.GPSQualityCode() +\
+            str(self.SpeedVal) + "," + str(self.TrackVal) + "," + self.GPSQuality +\
                 self.getE1() + \
                 '\n'
         with open(self.saveFile, 'a') as the_file:
@@ -212,24 +340,6 @@ class EMApp():
         self.markTrack(self.X1Val, self.Y1Val)
         self.recordEM(self.EM_PRP0Val,self.EM_PRP1Val, self.EM_PRP2Val, 
                       self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val)
-
-    def GPSQualityCode(self):
-        code = self.GPSQualityVal
-        if (code == 0): 
-            return "Invalid"
-        if (code == 1): 
-            return "GPS"
-        if (code == 2): 
-            return "Diff. GPS"
-        if (code == 3): 
-            return "NA"
-        if (code == 4): 
-            return "RTK Fixed"
-        if (code == 5): 
-            return "RTK Float"
-        if (code == 6): 
-            return "INS DeadR"
-        return "Unknown"
 
     def openComms(self, cfg):
         print("Opening " + cfg['Mode'] + ' ' + cfg['Address'])
@@ -293,7 +403,7 @@ class EMApp():
                 self.X1Val = E
                 self.Y1Val = S
                 self.H1Val = H
-                self.GPSQualityVal = Q
+                self.GPSQuality = Q
             return 1
         elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
             T = 0.0
@@ -336,79 +446,12 @@ class EMApp():
             return 1
         return 0
 
-    # The gps reader thread
-    def gps1_read(self, cfgName):
-        print("f=" + str(self.stopFlag.is_set()))
-        while not self.stopFlag.is_set():
-            cfg = config[cfgName]
-            if (cfg['Mode'] == "Undefined") | ("No devices" in cfg['Address']):
-               self.lastGPS1Time = datetime.datetime.now()
-            else:
-                self.restartGPS1Flag.clear()
-                self.lastGPS1Time = datetime.datetime.now()
-                while "GPS" in self.errMsgSource: self.errMsgSource.remove("GPS")
-                self.X1Val = 0.0
-                self.Y1Val = 0.0
-                self.H1Val = 0.0
-                s = None
-                try:
-                    encoding = 'ascii'
-                    line = ""
-                    s = self.openComms(cfg)
-                    while (not self.stopFlag.is_set()) and not self.restartGPS1Flag.is_set():
-                        while (line.find('\n') < 0) and not self.restartGPS1Flag.is_set():
-                            if (cfg['Mode'] == "Serial"):
-                                if (s.in_waiting <= 0):
-                                    time.sleep(0.01)
-                                else:
-                                    byt = s.read(s.in_waiting)
-                                    line += str(byt, encoding) # serial "socket"
-                            else:
-                                try:
-                                    line += str(s.recv(1), encoding)  # BT, IP socket - has timeout set
-                                except socket.timeout as e:
-                                    err = e.args[0]
-                                    # this next if/else is a bit redundant, but illustrates how the
-                                    # timeout exception is setup
-                                    if err == 'timed out':
-                                        time.sleep(1)
-                                        print("timeout detected")
-                                        continue
-                                    else:
-                                        raise e
-                                #except socket.error as e:
-                                #    # Something else happened, handle error, exit, etc.
-                                #    print(e)
-                                #else:
-                                #    if len(msg) == 0:
-                                #        print('orderly shutdown on server end')
-                                #        sys.exit(0)
-                                #    else:
-                                #        # got a message do something :)
-
-                        linedata = line[1:line.find('\n')]
-                        line = line[line.find('\n')+1:]
-
-                        if self.nmea_decode(linedata):
-                            self.lastGPS1Time = datetime.datetime.now()
-
-                except Exception as e:
-                    print("gps: " + str(e))
-                    #self.showMessage("Can't open " + cfg['Address'])
-                    self.errMsgSource.append("GPS")
-                    pass
-                if s is not None:
-                    s.close()
-            time.sleep(1)
-
     # The em reader thread
     def em1_read(self, cfgName):
         while not self.stopFlag.is_set():
             cfg = config[cfgName]
             self.lastEMTime = datetime.datetime.now()
-            if (cfg['Mode'] == "Undefined") | ("No devices" in cfg['Address']):
-                continue
-            else:
+            if (cfg['Mode'] != "Undefined"):
                 self.restartEMFlag.clear()
                 while "EM" in self.errMsgSource: self.errMsgSource.remove("EM")
                 self.EM_HCP0Val = 0.0
@@ -452,7 +495,7 @@ class EMApp():
                         linedata = line[:line.find('\n')]
                         line = line[line.find('\n')+1:]
 
-                        if self.nmea_decode(linedata, useGPS=False): # fixme: Only use dualEM gps signal if there's no alternative
+                        if self.nmea_decode(linedata, useGPS=False): 
                             self.lastEMTime = datetime.datetime.now()
 
                         ROLL = self.EM_RollVal
