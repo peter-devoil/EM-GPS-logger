@@ -17,8 +17,8 @@ document.querySelector('#channelSelector')
     .addEventListener('change', function () { 
         console.log("Change channelSelector: " + this.value);
         emData.selectedChannel = this.value;
-        myHist.drawData(histElement, msgElement);
-        myMap.drawData(mapElement);
+        myHist.drawData(histElement, msgElement, emData);
+        myMap.drawData(mapElement, emData, plotData);
     }, false);
 
 // Get the EM data from a file. Can be either csv or shapefile
@@ -75,14 +75,14 @@ document.querySelector('#open_em_data')
     selector.value = channels[0];
 
     myHist.loadEMData( emData );
-    myHist.drawData( histElement, msgElement )
+    myHist.drawData( histElement, msgElement, emData )
     
     myMap.loadEMData( emData );
-    myMap.drawData( mapElement );
-    myMap.recolourData( mapElement );
+    myMap.drawData( mapElement, emData, plotData );
+    myMap.recolourData( mapElement , emData);
 });
 
-// Get the plot outline data from a file
+// Get the plot outline data from a file. Usually .shp 
 document.querySelector('#open_plot_data')
     .addEventListener('click', async() => { 
     const shpBundle = {};
@@ -102,24 +102,79 @@ document.querySelector('#open_plot_data')
     
     plotData = await shp(shpBundle);
     myMap.loadPlotData( plotData );
-    myMap.drawData(mapElement);
-    myMap.recolourData(mapElement);
+    myMap.drawData(mapElement, emData, plotData);
+    myMap.recolourData(mapElement, emData);
+});
+
+
+// Get the EM data from a file. Can be either csv or shapefile
+document.querySelector('#save_data')
+    .addEventListener('click', async () => {
+        //const handles = await window.showSaveFilePicker({multiple: true, startIn: 'downloads'});
+        var channels = Object.getOwnPropertyNames(emData.features[0].properties)
+           .filter(c => c.indexOf("PRP") >=0 || c.indexOf("HCP") >=0);
+
+        channels.forEach(c => {
+            for (var i = 0; i < emData.features.length; i++) {
+                var x = emData.features[i].properties[c];
+                var value;
+                if (typeof x === 'string' || x instanceof String)
+                    value = parseFloat(x);
+                else
+                    value = x;
+                if (emData.selected[i] == true &&
+                    value >= emData.lowerBounds[c] &&
+                    value <= emData.upperBounds[c]) {
+                    /*emData.selected[i] = true; */
+                } else {
+                    emData.selected[i] = false;
+                }
+            }
+        });
+
+        var dataToWrite = new Object();
+        dataToWrite.features = [];
+        dataToWrite.type = emData.type;
+        for (var i = 0; i < emData.features.length; i++) {
+            if (emData.selected[i] == true) {
+                dataToWrite.features.push(emData.features[i]);
+            }
+        }
+
+        const zipData = shpwrite.zip(dataToWrite);
 });
 
 myHist.setRecolour (function () { 
-    myMap.recolourData( mapElement); 
+    myMap.recolourData( mapElement, emData); 
 });
 
-
-// Get the plot outline data from a file
+// Listen for change in the entry boxes and update chart bars
 document.querySelector('#lowBoundInput')
     .addEventListener('change', async(e) => { 
         emData.lowerBounds[emData.selectedChannel] = e.target.value;
-        myHist.updateBounds( histElement, msgElement )
+        myHist.updateBounds( histElement, msgElement, emData )
     });
 
 document.querySelector('#highBoundInput')
     .addEventListener('change', async(e) => { 
         emData.upperBounds[emData.selectedChannel] = e.target.value;
-        myHist.updateBounds( histElement, msgElement )
+        myHist.updateBounds( histElement, msgElement, emData )
     });
+
+
+document.querySelector('#mapMode')
+    .addEventListener('toggle', async(e) => { 
+        var w = e.target;
+        var sel = e.detail;
+        w.childNodes.forEach(x => {
+            if (typeof(x.id) != "undefined") {
+                if (sel.id != x.id) {
+                    x.toggled = false;
+                 } else {
+                    x.toggled = true;
+                 }
+            } 
+        });
+        myMap.setMapMode(mapElement, sel.id);
+    });
+    

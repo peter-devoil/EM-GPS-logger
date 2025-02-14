@@ -7,19 +7,22 @@
         var width = -1;
         var height = -1;
         var version = "0.0.1";
-        var emData = null;
         var plotData = null;
+        var mapMode = "panMode";
 
        // get the data
-       function loadEMData( _emData ) {
-              emData = _emData;
+       function loadEMData( emData ) {
+              emData.selected = new Array(emData.features.length).fill(true);
+              for (var i = 0; i <emData.features.length; i++) {
+                     emData.features[i].properties._featureId = i;
+              }
        }
 
-       function loadPlotData( _plotData ) {
-              plotData = _plotData;
+       function loadPlotData( plotData ) {
+              //plotData = _plotData;
        }
 
-       function drawData(element) {
+       function drawData(element, emData, plotData) {
               element.replaceChildren();
 
               width = element.offsetWidth;
@@ -84,11 +87,10 @@
 
               var svg = d3.select(element)
                      .append('svg')
-                     .attr("preserveAspectRatio", "xMinYMin meet")
-                     .attr("viewBox", "0 0 400 300")
+                     .attr("preserveAspectRatio", "xMidYMid meet") 
+                     .attr("viewBox", "0 0 " + width + " " + height)
                      .classed("svg-content-responsive", true);
-                     //.attr("width", width )
-                     //.attr("height", height )
+
               if (plotData != null) {
                      svg.append("g")
                             .selectAll("plotPath")
@@ -108,31 +110,80 @@
                             .append("circle")
                             .attr("transform", function (d) { return "translate(" + path.centroid(d) + ")"; })
                             .attr("r", 2)
-                            .style("fill", "purple");
+                            .style("fill", "purple")
+                            .on("click", (e, d) => clickEvent(e, d));
               }
 
 
               function handleZoom(e) { svg.attr('transform', e.transform);}
-              svg.call(d3.zoom().on('zoom', handleZoom)); 
+              svg.call(d3.zoom().filter(() => mapMode == "panMode").on('zoom', handleZoom)); 
+
+              function clickEvent(e, data) {
+                     var t = e.target;
+                     var featureIdx = data.properties._featureId;
+                     switch (mapMode) {
+                            case "yesMode":
+                                  emData.selected[featureIdx] = true;
+                                  t.style.fill = "purple"
+                                  break;
+                            case "noMode":
+                                  emData.selected[featureIdx] = false;
+                                  t.style.fill = "green"
+                                  break;
+                     }             
+              }
        }
 
-       function recolourData(element) {
-              if (emData != null) {
-                     d3.selectAll("circle")
-                            .style("fill", (d) => {
-                                   if (d.properties[[emData.selectedChannel]] < emData.lowerBounds[emData.selectedChannel])
-                                          return("blue");
-                                   if (d.properties[[emData.selectedChannel]] > emData.upperBounds[emData.selectedChannel])
-                                          return("red");
-                                   return("purple");});
+              function recolourData(element, emData) {
+                     if (emData != null) {
+                            d3.selectAll("circle")
+                                   .style("fill", (d) => {
+                                          if (emData.selected[d.properties._featureId] == false)
+                                                 return ("green");
+                                          if (d.properties[[emData.selectedChannel]] < emData.lowerBounds[emData.selectedChannel])
+                                                 return ("blue");
+                                          if (d.properties[[emData.selectedChannel]] > emData.upperBounds[emData.selectedChannel])
+                                                 return ("red");
+                                          return ("purple");
+                                   });
+                     }
               }
-       }       
+
+
+        function setMapMode(element, mode) {
+               mapMode = mode;
+               //var svg = d3.select(element)
+               switch (mode) {
+                      case "panMode":
+
+                             break;
+                      case "yesMode":
+
+                             break;
+                      case "noMode":
+
+                             break;
+               }
+        }
 
        exports.version = version;
        exports.recolourData = recolourData;
        exports.loadEMData = loadEMData;
        exports.loadPlotData = loadPlotData;
        exports.drawData = drawData;
+       exports.setMapMode = setMapMode;
        Object.defineProperty(exports, '__esModule', { value: true });
 })));
 
+/* Notes
+reading geotiff 
+
+https://observablehq.com/d/719a22e6fa68dccb
+img = (await FileAttachment('wp.tif')).arrayBuffer()
+  .then(t => geotiff.fromArrayBuffer(t))
+  .then(t => t.getImage())
+
+https://gist.github.com/rveciana/263b324083ece278e966686d7dba700f
+
+
+ */

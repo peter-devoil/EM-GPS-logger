@@ -13,24 +13,21 @@ body {
     overflow: hidden;
 }
 
-* {
+/* * {
     box-sizing: border-box
-}
+} 
 
 .varselector {
-    /*position: sticky;
-    top: 0;*/
     width: 100%;
-    /*background-color: #333;
-       color: #fff;*/
     padding: 10px;
     z-index: 1000;
 }
+*/
 
 .histogram,
 .map {
-    flex-grow: 1;
-    min-height: 300px;
+    flex: 1 1 auto;
+    height: 100%;
 }
 
 .svg-container {
@@ -51,19 +48,20 @@ body {
 }
 
 .messagebox {
-    /*position: sticky;
-    bottom: 0;*/
-    /*background-color: #333;
-       color: #fff;*/
     padding: 10px;
     text-align: left;
 }
 
 .buttonbar {
-    padding: 10px 20px 10px 20px;
+    flex: 0 1 60px;
 }
 
 .x-button {
+    margin: 10px 20px 10px 20px;
+}
+
+#channelSelector {
+    width: 150px;
     margin: 10px 20px 10px 20px;
 }
 

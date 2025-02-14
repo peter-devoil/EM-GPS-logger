@@ -10,15 +10,15 @@
        // set the dimensions and margins of the graph
        var width = -1;
        var height = -1;
-       var emData = null;
+       //var emData = null;
        
        var reColourFunction = null;
 
        function setRecolour (f) { reColourFunction = f; }
 
        // get the data
-       function loadEMData( _emData ) {
-           emData = _emData;
+       function loadEMData( emData ) {
+           //emData = _emData;
            var channels = Object.getOwnPropertyNames(emData.features[0].properties)
               .filter(c => c.indexOf("PRP") >=0 || c.indexOf("HCP") >=0);
 
@@ -33,8 +33,8 @@
                          value = parseFloat(x);
                      else
                          value = x;
-                     if (isFinite(x)) {
-                            thisChan.push(x);
+                     if (isFinite(value)) {
+                            thisChan.push(value);
                      }
               });
 
@@ -57,10 +57,8 @@
        // keep these around for later..
        var x = null;
        var y = null;
-       function drawData(element, msgElement) {
+       function drawData(element, msgElement, emData) {
               element.replaceChildren();
-
-              if(emData == null) { return }
 
               var margin = { top: 10, right: 30, bottom: 30, left: 40 };
 
@@ -178,13 +176,13 @@
                                    .select("#" + what)
                                    .attr("x", x(newX))
                      }
-                     showTextSummary(msgElement, thisData);
+                     showTextSummary(msgElement, thisData, emData);
               }
-              showTextSummary(msgElement, thisData);
+              showTextSummary(msgElement, thisData, emData);
        }
 
        // called when entry x.yyy is changed
-       function updateBounds(histElement, msgElement) {
+       function updateBounds(histElement, msgElement, emData) {
               var svg = d3.select(histElement)
                      .selectChild('svg');
               svg
@@ -196,7 +194,7 @@
 
        }
 
-       function showTextSummary(element, data) {
+       function showTextSummary(element, data, emData) {
               const sum = arr => arr.reduce((partialSum, a) => partialSum + a, 0);
               var numLow = sum(data.map(d => d < emData.lowerBounds[emData.selectedChannel]));
               var pcntLow = Math.round(100 * numLow / data.length);
@@ -222,7 +220,6 @@
        exports.version = version;
        exports.loadEMData = loadEMData;
        exports.drawData = drawData;
-       exports.emData = emData;
        exports.setRecolour = setRecolour;
        exports.updateBounds= updateBounds;
        
