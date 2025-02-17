@@ -110,7 +110,14 @@ document.querySelector('#open_plot_data')
 // Get the EM data from a file. Can be either csv or shapefile
 document.querySelector('#save_data')
     .addEventListener('click', async () => {
-        //const handles = await window.showSaveFilePicker({multiple: true, startIn: 'downloads'});
+        const handle = await window.showSaveFilePicker({
+            types: [
+                {description: "Shapefile (zipped)", accept: { "application/zip": [".zip"] }}, 
+                {description: "CSV", accept: { "text/csv": [".csv"] }}], 
+            excludeAcceptAllOption: false,
+            //suggestedName: "",
+            startIn: 'downloads'});
+
         var channels = Object.getOwnPropertyNames(emData.features[0].properties)
            .filter(c => c.indexOf("PRP") >=0 || c.indexOf("HCP") >=0);
 
@@ -141,9 +148,36 @@ document.querySelector('#save_data')
             }
         }
 
-        const zipData = shpwrite.zip(dataToWrite);
-});
+        const newName = handle.name;
+        const writable = await handle.createWritable();  // not firefox/safari
+        if (handle.name.endsWith(".csv")) {
+            var csvHdr = ["Longitude", "Latitude",]
+                 .concat(Object.keys(dataToWrite.features[0].properties));
+            var csvBody = dataToWrite.features.map(f => 
+                Object.values(f.geometry.coordinates).toString()
+                   .concat(",")
+                   .concat(Object.values(f.properties).toString())).join("\n");
+            await writable.write(csvHdr + "\n" + csvBody);
+        }    
 
+        // if (handle.name.endsWith(".zip")) {
+        //     const zipData = await shpwrite.zip(dataToWrite);
+        //     await writable.write(zipData);
+        // } else {
+        //     const csvData = null; 
+        // }
+
+        // Close the file and write the contents to disk.
+        await writable.close();
+    });
+
+function convertToCSV(arr) {
+    const array = [Object.keys(arr[0])].concat(arr)
+
+    return array.map(it => {
+        return Object.values(it).toString()
+    }).join('\n')
+}
 myHist.setRecolour (function () { 
     myMap.recolourData( mapElement, emData); 
 });
