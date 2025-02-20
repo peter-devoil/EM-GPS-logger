@@ -5,26 +5,17 @@
   "main": "src/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "electron .",
-    "dev": "electron-webpack dev",
-    "compile": "electron-webpack",
-    "dist": "npm compile && electron-builder",
-    "dist:dir": "npm dist --dir -c.compression=store -c.mac.identity=null"
+    "start": "serve --ssl-cert ./certs/client-cert.pem --ssl-key ./certs/client-key.pem -C `pwd`"
   },
   "author": "peter.devoil@uq.edu.au",
-  "license": "ISC",
-  "devDependencies": {
-    "electron": "^34.0.0",
-    "electron-builder": "^25.1.8",
-    "electron-webpack": "^2.8.2",
-    "webpack": "^4.42.1"
-  },
+  "license": "MIT",
   "dependencies": {
     "@mapbox/shp-write": "^0.4.3",
     "bootstrap": "^5.3.3",
     "csv2geojson": "^5.1.2",
     "d3": "^7.9.0",
     "file-selector": "^2.1.2",
+    "serve": "^14.2.4",
     "shpjs": "^6.1.0",
     "split.js": "^1.6.5",
     "xel": "^0.29.0"

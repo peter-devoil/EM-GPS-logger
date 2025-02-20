@@ -1,10 +1,11 @@
+'use strict';
+
 // This file is required by the index.html file and will
 // be executed in the renderer process for that window.
 // All of the Node.js APIs are available in this process.
 
-
-var histElement = document.querySelector('.histogram');
-var mapElement = document.querySelector('.map');
+var histElement = document.querySelector('#histogram');
+var mapElement = document.querySelector('#map');
 var msgElement = document.querySelector(".messagebox")
 var split = Split(['#split-0', '#split-1'] /*, {onDragEnd: () => myHist.setupHist(histElement)}*/);
 
@@ -24,20 +25,22 @@ document.querySelector('#channelSelector')
 // Get the EM data from a file. Can be either csv or shapefile
 document.querySelector('#open_em_data')
     .addEventListener('click', async() => { 
+        //fixme add file types to options
     const handles = await window.showOpenFilePicker({multiple: true, startIn: 'downloads'});
     if (handles.length == 1) {
         const file = await handles[0].getFile();
         var ext = file.name.split(".").pop();
         //fixme test if csv extension
         const data = await file.text();
-        emData = csv2geojson.csv2geojson(data, { latfield: 'Latitude',lonfield: 'Longitude'}, 
+        csv2geojson.csv2geojson(data, { latfield: 'Latitude',lonfield: 'Longitude'}, 
             function(err, data) {
-            // err has any parsing errors fixme
+                emData = data;
+                // err has any parsing errors fixme
         });
     } else if (handles.length > 1) {
         const shpBundle = {};
         for(const h of handles) {
-            file = await h.getFile();
+            var file = await h.getFile();
             if (file.name.endsWith(".shp")) {
                 shpBundle.shp = await file.arrayBuffer();
             } else if (file.name.endsWith(".dbf")) {
@@ -88,7 +91,7 @@ document.querySelector('#open_plot_data')
     const shpBundle = {};
     const handles = await window.showOpenFilePicker({multiple: true, startIn: 'downloads'});
     for(const h of handles) {
-        file = await h.getFile();
+        var file = await h.getFile();
         if (file.name.endsWith(".shp")) {
             shpBundle.shp = await file.arrayBuffer();
         } else if (file.name.endsWith(".dbf")) {
@@ -107,7 +110,7 @@ document.querySelector('#open_plot_data')
 });
 
 
-// Get the EM data from a file. Can be either csv or shapefile
+// Save the EM data to a file. Can be either csv or shapefile
 document.querySelector('#save_data')
     .addEventListener('click', async () => {
         const handle = await window.showSaveFilePicker({
@@ -134,7 +137,7 @@ document.querySelector('#save_data')
                     value <= emData.upperBounds[c]) {
                     /*emData.selected[i] = true; */
                 } else {
-                    emData.selected[i] = false;
+                    emData.selected[i] = false; //fixme: this is modifying the original, should be a copy
                 }
             }
         });
@@ -160,6 +163,7 @@ document.querySelector('#save_data')
             await writable.write(csvHdr + "\n" + csvBody);
         }    
 
+        // fixme
         // if (handle.name.endsWith(".zip")) {
         //     const zipData = await shpwrite.zip(dataToWrite);
         //     await writable.write(zipData);
@@ -178,6 +182,7 @@ function convertToCSV(arr) {
         return Object.values(it).toString()
     }).join('\n')
 }
+
 myHist.setRecolour (function () { 
     myMap.recolourData( mapElement, emData); 
 });
@@ -212,3 +217,11 @@ document.querySelector('#mapMode')
         myMap.setMapMode(mapElement, sel.id);
     });
     
+
+let dialog = document.querySelector("#dialog");
+let closeButton = document.querySelector("#close-button");
+closeButton.addEventListener("click", () => dialog.close());
+
+if (browserOK() == 0) {
+    dialog.showModal();
+}

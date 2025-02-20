@@ -1,0 +1,88 @@
+@import './node_modules/bootstrap/dist/css/bootstrap.min.css';
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+.varselector {
+    width: 100%;
+    padding: 5px;
+    z-index: 1000;
+}
+
+#histogram{
+    flex: 1 1 auto;
+    height: calc(100vh - 260px); 
+}
+
+#map {
+    flex: 1 1 auto;
+    height: calc(100vh - 32px); 
+}
+
+#channelSelector {
+    width: 150px;
+    margin: 10px 20px 10px 20px;
+}
+
+.svg-container {
+    display: inline-block;
+    position: relative;
+    width: 100%;
+    /*padding-bottom: 100%; 
+     aspect ratio */
+    vertical-align: top;
+    overflow: hidden;
+}
+
+.svg-content-responsive {
+    display: inline-block;
+    position: absolute;
+    top: 10px;
+    left: 0;
+}
+
+.button {
+    margin: 10px 20px;
+}
+
+.card {
+    margin: 0px 5px;
+    padding: 10px 10px;
+}
+
+.messages {
+    display: flex;
+    flex-direction: row;
+    flex-grow: 1;
+}
+
+.split {
+    display: flex;
+    flex-direction: row;
+    flex-grow: 1;
+}
+
+.gutter {
+    background-color: #eee;
+    background-repeat: no-repeat;
+    background-position: 50%;
+}
+
+.gutter.gutter-horizontal {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAeCAYAAADkftS9AAAAIklEQVQoU2M4c+bMfxAGAgYYmwGrIIiDjrELjpo5aiZeMwF+yNnOs5KSvgAAAABJRU5ErkJggg==');
+    cursor: col-resize;
+}
+
+dialog::backdrop {
+    pointer-events: none;
+  }

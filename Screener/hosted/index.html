@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en" class="mdc-typography">
+
+<head>
+       <meta charset="UTF-8">
+       <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
+       <meta http-equiv="Content-Security-Policy" content="default-src 'self';
+         connect-src * 'self' 'unsafe-eval';
+         script-src 'self' 'unsafe-eval';
+         img-src * 'self' data: https:;
+         font-src 'self' https://fonts.gstatic.com;
+         style-src 'self' 'unsafe-inline' https://fonts.googleapis.com" />
+       <meta name="xel-theme" content="node_modules/xel/themes/fluent.css">
+       <meta name="xel-accent-color" content="blue">
+       <meta name="xel-icons" content="node_modules/xel/icons/fluent.svg">
+       <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+       <link href="index.css" rel="stylesheet" />
+       <script src="node_modules/xel/xel.js" type="module"></script>
+       <script src="node_modules/split.js/dist/split.min.js"></script>
+       <script src="node_modules/file-selector/dist/bundles/file-selector.umd.min.js"></script>
+       <script src="node_modules/d3/dist/d3.min.js"></script>
+       <script src="node_modules/shpjs/dist/shp.min.js"></script>
+       <script src="node_modules/csv2geojson/csv2geojson.js"></script>
+       <script src="node_modules/@mapbox/shp-write/shpwrite.js"></script>
+       <script src="hist.js"></script>
+       <script src="map.js"></script>
+       <script src="browserTest.js"></script>
+       <title>EM Screener</title>
+</head>
+<body>
+       <div class="split">
+              <div id="split-0" class="flex-column">
+                     <div id="histogram" class="svg-container">&nbsp;Open EM data to<br>&nbsp;show histogram</div>
+                     <x-select id="channelSelector">
+                            <x-menu id="channelSelectorMenu">
+                                   <x-menuitem value="Undefined" toggled>
+                                          <x-label>Undefined</x-label>
+                                   </x-menuitem>
+                            </x-menu>
+                     </x-select>
+                     <div class="flex-row messages">
+                     <x-card class="card">
+                                   <strong>Low</strong>
+                                   <x-box class="flex-row"><x-numberinput id="lowBoundInput"
+                                                 precision="2"><x-stepper></x-stepper></x-numberinput>
+                                          <span id="lowBoundMsg">Messages appear here</span>
+                                   </x-box>
+                     </x-card>
+                     <x-card class="card">
+                                   <strong>High</strong>
+                                   <x-box><x-numberinput id="highBoundInput"
+                                                 precision="2"><x-stepper></x-stepper></x-numberinput>
+                                          <span id="highBoundMsg">Messages appear here</span>
+                                   </x-box>
+                     </x-card></div>
+                     <x-buttons  class="flex-row">
+                            <x-button id="open_em_data" class="button">
+                                   <x-label>Open EM Data</x-label>
+                            </x-button>
+                            <x-button id="open_plot_data" class="button">
+                                   <x-label>Open plot outlines</x-label>
+                            </x-button>
+                            <x-button id="save_data" class="button">
+                                   <x-label">Save</x-label>
+                            </x-button>
+                     </x-buttons>
+              </div>
+              <div id="split-1" class="flex-column">
+                     <div id="map" class="svg-container">&nbsp;Open plot outlines<br>&nbsp;to show map</div>
+                     <x-tags id="mapMode" class="flex-row">
+                            <x-tag id="panMode" toggled>
+                                   <x-icon href="#link"></x-icon>
+                                   <x-label>Pan</x-label>
+                            </x-tag>
+                            <x-tag id="yesMode">
+                                   <x-icon href="#visibility-visible"></x-icon>
+                                   <x-label>Select</x-label>
+                            </x-tag>
+                            <x-tag id="noMode">
+                                   <x-icon href="#visibility-hidden"></x-icon>
+                                   <x-label>Remove</x-label>
+                            </x-tag>
+                     </x-tags>
+              </div>
+       </div>
+       <dialog id="dialog">
+                     <p>The borg requests you use Google Chrome for this app</p>
+                     <footer>
+                            <x-button id="close-button" toggled>
+                                   <x-label>OK</x-label>
+                            </x-button>
+                     </footer>
+       </dialog>
+       <script src="./renderer.js"></script>
+   </body>
+</html>
