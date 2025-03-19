@@ -20,25 +20,20 @@ import configparser
 #me = singleton.SingleInstance()
 
 config = configparser.ConfigParser()
-if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
+if not os.path.exists('Dualem_companion.ini'):
     #config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
     config['EM'] = {'Mode': 'Undefined', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
-    config['Drone'] = {'system_address': 'udp://:14540'}
+    #config['Drone'] = {'system_address': 'udp://:14540'}
+    config['Drone'] = {'system_address': 'serial:///dev/ttyAGM0:58600'}
 
     config['Operator'] = {'Name' : getpass.getuser()}
-    config['Output'] = {'Frequency' : 2}
+    config['Output'] = {'Frequency' : 2, 'Directory' : '/media/qaafi/usb'}
+
+    with open('Dualem_companion.ini', 'w') as configfile:
+        config.write(configfile)
 
 else:
     config.read('Dualem_companion.ini')
-
-    if not config.has_option('EM', 'Baud'):
-        config['EM']['Baud'] = "38400"
-
-    if not config.has_section('Output'):
-        config.add_section('Output')
-
-    if not config.has_option('Output','Frequency'):
-        config['Output']['Frequency'] = "2"
 
 lock = threading.Lock()
 
@@ -67,7 +62,7 @@ def MakeHandlerClassWithBakedInApp(app):
 
    return Handler
 
-
+# look out for "SPRAY" (216) events in the mission plan
 async def monitor_mission_progress(emApp, drone, mission_items):
    async for p in drone.mission_raw.mission_progress():
        if (p.current < len(mission_items)):
@@ -80,6 +75,7 @@ async def monitor_mission_progress(emApp, drone, mission_items):
                else:
                    emApp.Pause()
 
+# Store away GPS position
 async def monitor_gpsPos(emApp, drone):
    async for p in drone.telemetry.position():
        emApp.X1Val = p.longitude_deg
@@ -87,14 +83,17 @@ async def monitor_gpsPos(emApp, drone):
        emApp.H1Val = p.absolute_altitude_m
        emApp.lastGPSTime = datetime.datetime.now()
 
+# Store away GPS heading
 async def monitor_gpsHead(emApp, drone):
    async for p in drone.telemetry.heading():
        emApp.TrackVal= p.heading_deg
 
+# Store away velocity
 async def monitor_gpsVelocity(emApp, drone):
    async for p in drone.telemetry.velocityned():
        emApp.SpeedVal= math.sqrt(p.north_m_s * p.north_m_s + p.east_m_s * p.east_m_s + p.down_m_s * p.down_m_s)
 
+# Will likely always be RTK fixed - rover will stop if GPS disappears
 async def monitor_gpsQuality(emApp, drone):
    async for p in drone.telemetry.gpsinfo():
        emApp.GPSQuality = str(p.fix_type)
@@ -115,7 +114,7 @@ class EMApp():
     
         # Default filenames
         today = datetime.datetime.now().strftime("%d-%m-%Y")
-        self.saveFile = os.getcwd() + '/' + "EMXX.All." + today + ".csv"  # fixme use mission name
+        self.saveFile = config['Output']['Directory'] + '/' + "EM.RootBot." + today + ".csv"  # fixme use mission name
 
         self.operator = config['Operator']['Name']
     
@@ -196,14 +195,7 @@ class EMApp():
               return
         try:
             if (datetime.datetime.now() - self.lastErrorTime).total_seconds() > 10:
-                while "GPS" in self.errMsgSource: self.errMsgSource.remove("GPS")
                 while "EM" in self.errMsgSource: self.errMsgSource.remove("EM")
-
-            if not self.hasGPSError() and \
-                    config['GPS']['Mode'] != "Undefined" and \
-                    (datetime.datetime.now() - self.lastGPSTime).total_seconds() > 5:
-                print("GPS Timeout")
-                self.errMsgSource.append("GPS")
 
             if not self.hasEMError() and \
                     config['EM']['Mode'] != "Undefined" and \
@@ -234,58 +226,62 @@ class EMApp():
         asyncio.run(self.initDrone())
         
     async def initDrone(self):
-        drone = System()
-        await drone.connect(system_address=config['Drone']['system_address'])
-
-        print("Waiting for drone to connect...")
-        async for state in drone.core.connection_state():
-            if state.is_connected:
-                print(f"-- Connected to drone!")
-                break
-        
-        # 1st test is always true *fixme* need to align this with powerup?
-        async for change in drone.mission_raw.mission_changed():
-            if change:
-                break
-            time.sleep(0.5)
-
         while True:
-            print(f"-- Waiting for a new mission")
-            async for change in drone.mission_raw.mission_changed():
-                if change:
+            drone = System()
+            print("Waiting for drone to connect at " + config['Drone']['system_address'])
+
+            await drone.connect(system_address=config['Drone']['system_address'])
+            async for state in drone.core.connection_state():
+                if state.is_connected:
+                    print("-- Connected to drone!")
                     break
-                time.sleep(0.5)
 
-            mission_items = await drone.mission_raw.download_mission()
-            print("-- Got mission (" + str(len(mission_items)) + " items)")
+            while True:
+                print("-- Waiting for a new mission")
+                tasks = [] # async tasks monitoring mavlink
+                bound_function = types.MethodType(monitor_gpsPos, self)
+                tasks.append(asyncio.ensure_future( bound_function(drone) ))
 
-            tasks = []
-            bound_function = types.MethodType(monitor_mission_progress, self)
-            tasks.append(asyncio.ensure_future( bound_function(drone, mission_items)))
+                bound_function = types.MethodType(monitor_gpsHead, self)
+                tasks.append(asyncio.ensure_future( bound_function(drone) ))
 
-            bound_function = types.MethodType(monitor_gpsPos, self)
-            tasks.append(asyncio.ensure_future( bound_function(drone) ))
+                bound_function = types.MethodType(monitor_gpsVelocity, self)
+                tasks.append(asyncio.ensure_future( bound_function(drone) ))
 
-            bound_function = types.MethodType(monitor_gpsHead, self)
-            tasks.append(asyncio.ensure_future( bound_function(drone) ))
+                try:
+                    mission_items = await drone.mission_raw.download_mission()
+                    print("-- Found mission of " + str(len(mission_items)) + " items")
 
-            bound_function = types.MethodType(monitor_gpsVelocity, self)
-            tasks.append(asyncio.ensure_future( bound_function(drone) ))
+                    bound_function = types.MethodType(monitor_mission_progress, self)
+                    mission_task = asyncio.ensure_future( bound_function(drone, mission_items))
+                    tasks.append(mission_task)
+                    while True:
+                        async for change in drone.mission_raw.mission_changed():
+                            if change:
+                                print("-- Abandoning old mission")
+                                mission_task.cancel()
+                                tasks.pop() # mission is always last task
+                                mission_items = await drone.mission_raw.download_mission()
+                                print("-- Got new mission of " + str(len(mission_items)) + " items")
+                                bound_function = types.MethodType(monitor_mission_progress, self)
+                                mission_task = asyncio.ensure_future( bound_function(drone, mission_items))
+                                tasks.append(mission_task)
 
-            async for p in drone.mission_raw.mission_progress():
-                 if p.current >= p.total:
-                     break
-                 time.sleep(1)
+                        async for p in drone.mission_raw.mission_progress():
+                            if p.current >= p.total:
+                                print("-- Mission is finished")
+                                mission_task.cancel()
 
-            print("-- Mission finished")
+                        time.sleep(0.5)
+                except Exception as err:
+                    print(f"Unexpected {err=}, {type(err)=}")
+                    # fixme - unsure what will happen when the drone disconnects?
+                finally:
+                    for t in tasks:
+                        t.cancel()
+                    print("Unwound drone callbacks")
 
-            try:
-                 for t in tasks:
-                     t.cancel()
-            finally:
-                print("Unwound drone GPS callbacks")
-
-# Drone callbacks
+    # Logging callbacks
     def doLogging(self):
         t0 = datetime.datetime.now()
         self.doit()
@@ -310,9 +306,6 @@ class EMApp():
         self.saveConfig()
         self.stopFlag.set()
         sys.exit(0)
-
-    def hasGPSError (self):
-        return "GPS" in self.errMsgSource
 
     def hasEMError (self):
         return "EM" in self.errMsgSource
