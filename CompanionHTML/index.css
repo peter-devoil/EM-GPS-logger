@@ -1,0 +1,94 @@
+/* fixme - try to use system colours https://developer.mozilla.org/en-US/docs/Web/CSS/system-color */
+
+html,
+body {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+
+    display: flex;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    overflow: hidden;
+}
+
+#trace{
+    flex: 1 1 auto;
+    height: calc(100vh - 150px); 
+}
+
+#map {
+    flex: 1 1 auto;
+    height: calc(100vh - 150px); 
+}
+
+#channelSelector {
+    width: 150px;
+    margin: 10px 20px 10px 20px;
+}
+
+.svg-container {
+    display: inline-block;
+    position: relative;
+    width: 100%;
+    /*padding-bottom: 100%; 
+     aspect ratio */
+    vertical-align: top;
+    overflow: hidden;
+}
+
+.svg-content-responsive {
+    display: inline-block;
+    position: absolute;
+    top: 10px;
+    left: 0;
+}
+
+.button {
+    margin: 10px 20px;
+}
+
+.messages {
+    display: flex;
+    flex-direction: row;
+    flex-grow: 1;
+}
+
+#status {
+    width: 32%;
+}
+
+#lastUpdate {
+   width: 32%;
+}
+
+#startStop {
+
+}
+
+#powerOff {
+    color: white;
+    background: #d02b2b;
+}
+
+.split {
+    display: flex;
+    flex-direction: row;
+    flex-grow: 1;
+}
+
+.gutter {
+    background-color: #eee;
+    background-repeat: no-repeat;
+    background-position: 50%;
+}
+
+.gutter.gutter-horizontal {
+    background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAeCAYAAADkftS9AAAAIklEQVQoU2M4c+bMfxAGAgYYmwGrIIiDjrELjpo5aiZeMwF+yNnOs5KSvgAAAABJRU5ErkJggg==');
+    cursor: col-resize;
+}
+
+dialog::backdrop {
+    pointer-events: none;
+}

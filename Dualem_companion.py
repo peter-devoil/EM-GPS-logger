@@ -10,10 +10,15 @@ import time
 import math
 import sys
 import types
+import json
+import urllib
 import threading
 import datetime
 import getpass
 import configparser
+import unicodedata
+import string
+import csv
 
 #from tendo import singleton
 # 
@@ -23,11 +28,12 @@ config = configparser.ConfigParser()
 if not os.path.exists('Dualem_companion.ini'):
     #config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
     config['EM'] = {'Mode': 'Undefined', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
-    #config['Drone'] = {'system_address': 'udp://:14540'}
-    config['Drone'] = {'system_address': 'serial:///dev/ttyAGM0:58600'}
+    config['Drone'] = {'system_address': 'udp://:14540'}
+    #config['Drone'] = {'system_address': 'serial:///dev/ttyAGM0:58600'}
 
     config['Operator'] = {'Name' : getpass.getuser()}
     config['Output'] = {'Frequency' : 2, 'Directory' : '/media/qaafi/usb'}
+    #config['Output'] = {'Frequency' : 2, 'Directory' : os.getcwd()}
 
     with open('Dualem_companion.ini', 'w') as configfile:
         config.write(configfile)
@@ -45,32 +51,102 @@ def dm(x):
 def decimal_degrees(degrees, minutes):
     return degrees + minutes/60 
 
+# A mini http server
 def MakeHandlerClassWithBakedInApp(app):
-   class Handler(BaseHTTPRequestHandler):
-       def __init__(self, *args, **kwargs):
-          self.emApp = app
-          super().__init__(*args, **kwargs)
+    class Handler(BaseHTTPRequestHandler):
+        def __init__(self, *args, **kwargs):
+            self.emApp = app
+            super().__init__(*args, **kwargs)
        
-       def do_GET(self):
-          self.send_response(200)
-          self.send_header("Content-type", "text/html")
-          self.end_headers()
-          self.wfile.write(bytes("<html><head><title>Robot Companion</title></head>", "utf-8"))
-          self.wfile.write(bytes("<body>", "utf-8"))
-          self.wfile.write(bytes("Status:<br/>" + self.emApp.StatusInfo() + "<br/>","utf-8"))
-          self.wfile.write(bytes("</body></html>", "utf-8"))
+        def do_GET(self):
+            if self.path.startswith("/getData"):
+                since = -1
+                try:
+                    p = urllib.parse.urlparse(self.requestline)
+                    q = dict(urllib.parse.parse_qsl(p.query.split(" ")[0]))
+                    since = int(q['since'])
+                except:
+                        print("?since = " + self.requestline)
+                        since = 0
+                if (since >= 0):
+                    self.getData( since )
+            elif self.path.startswith("/getStatus"):
+                self.getStatus( )
+            elif self.path.startswith("/setStatus"):
+                newStatus = ""
+                try:
+                    p = urllib.parse.urlparse(self.requestline)
+                    q = dict(urllib.parse.parse_qsl(p.query.split(" ")[0]))
+                    newStatus = q['status']
+                except:
+                    print("?newStatus = " + self.requestline)
+                self.setStatus( newStatus )
+            elif self.path.startswith("/shutDown"):  # fixme add a password to this
+                self.doShutDown( )
+            else:
+                if self.path == "/":
+                    self.path = "index.html"
+                if self.path[0] == "/":
+                    self.path = self.path[1:]
 
-   return Handler
+                path = os.getcwd() + "/CompanionHTML/" + os.path.normpath(self.path)
+
+                if (os.path.isfile(path)):
+                    mimetype = os.path.splitext(path)[1][1:]
+                    if (mimetype == "js"):
+                        mimetype = "javascript"
+                    print("Sending " + path + " as " + mimetype)
+                    self.send_response(200)
+                    self.send_header("Content-type", "text/" + mimetype)
+                    self.end_headers()
+                    with open(path, "rb") as f:
+                       self.wfile.write(f.read())
+                    
+                else:
+                    print("Failed " + path + " as " + os.path.splitext(path)[1][1:])
+                    self.send_response(404)
+
+        def getData(self, since):
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(bytes(json.dumps(self.emApp.getRecords(since) , ensure_ascii=False), 'utf-8'))
+
+        def getStatus(self):
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(bytes(json.dumps(self.emApp.StatusInfo(), ensure_ascii=False), 'utf-8'))
+
+        def setStatus(self, newStatus):
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(bytes(json.dumps(self.emApp.setStatus(newStatus), ensure_ascii=False), 'utf-8'))
+
+    return Handler
+
+def doShutDown():
+#    os.system( "/usr/sbin/shutdown -h +1") fixme - sudo?
+    os._exit(1)
+
+# watch for a new mission appearing
+async def monitor_mission_changes(emApp, drone):
+    async for change in drone.mission_raw.mission_changed():
+        if change:
+            await emApp.reloadMission(drone)
+        else:
+            print("-- No new mission")
 
 # look out for "SPRAY" (216) events in the mission plan
-async def monitor_mission_progress(emApp, drone, mission_items):
+async def monitor_mission_progress(emApp, drone):
    async for p in drone.mission_raw.mission_progress():
-       if (p.current < len(mission_items)):
+       if (emApp != None and p.current < len(emApp.mission_items)):
            print(f"Mission progress: "
                f"{p.current}/"
-               f"{p.total}" + ", cmd=" + str(mission_items[p.current].command))
-           if emApp != None and mission_items[p.current].command == 216:
-               if(mission_items[p.current].param1 > 0):
+               f"{p.total}" + ", cmd=" + str(emApp.mission_items[p.current].command))
+           if emApp.mission_items[p.current].command == 216:
+               if(emApp.mission_items[p.current].param1 > 0):
                    emApp.Start()
                else:
                    emApp.Pause()
@@ -94,9 +170,9 @@ async def monitor_gpsVelocity(emApp, drone):
        emApp.SpeedVal= math.sqrt(p.north_m_s * p.north_m_s + p.east_m_s * p.east_m_s + p.down_m_s * p.down_m_s)
 
 # Will likely always be RTK fixed - rover will stop if GPS disappears
-async def monitor_gpsQuality(emApp, drone):
-   async for p in drone.telemetry.gpsinfo():
-       emApp.GPSQuality = str(p.fix_type)
+async def monitor_gpsQuality(self, drone):
+    async for p in drone.telemetry.gpsinfo():
+        self.GPSQuality = str(p.fix_type)
 
 
 ################## Initialisation here ##################
@@ -111,7 +187,9 @@ class EMApp():
 
         self.numEMErrors = 0
         self.lastBellTime = datetime.datetime.now() #- datetime.timedelta(seconds=10)
-    
+
+        self.record = []
+
         # Default filenames
         today = datetime.datetime.now().strftime("%d-%m-%Y")
         self.saveFile = config['Output']['Directory'] + '/' + "EM.RootBot." + today + ".csv"  # fixme use mission name
@@ -153,38 +231,55 @@ class EMApp():
         self.HttpThread.start()
         self.workers.append(self.HttpThread)
 
+        self.droneState = 'disconnected'
         self.DroneThread = threading.Thread(target=self.startDrone, args=('local',), daemon = True)
         self.DroneThread.start()
         self.workers.append(self.DroneThread)
 
+        # fixme - read from config file 
+        self.writeOutput = "off"
+        self.startLogging()
+
         for w in self.workers:
               w.join()
 
-    # toggle continuous operation on/off
+    # start continuous operation 
     def Start(self):
-        if (self.running == None):
-            self.startLogging()
+        self.writeOutput = "on"
 
     def Pause(self):
-        if (self.running != None):
-            self.running = None
+        self.writeOutput = "off"
 
     def Status(self):
-        if (self.running == None):
+        if (self.writeOutput == "off"):
             return("Paused")
         return("Running")
-        
+
+    def setStatus(self, newStatus):
+        result = {"result" : 'ok'}
+        if (newStatus == "Idle"):
+            self.writeOutput = "off"
+        elif (newStatus == "Running"):
+            self.writeOutput = "on"
+        else:
+            result['result'] = "oops"
+        return(result)
+
     def StatusInfo(self):
-        # fixme add drone info here
-        if (self.running != None):
-            return("EM: " + ("Error" if self.hasEMError else "Ok"))
-        return("Idle")
+        result = {}
+        result['status'] = "Running" if self.writeOutput == "on" else "Idle"
+        result['EM'] = "Error" if self.hasEMError else "Ok"
+        result['Drone'] = self.droneState
+        
+        return(result)
 
     def startLogging(self):
         if not os.path.exists(self.saveFile):
             with open(self.saveFile, 'w') as the_file:
                the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM HCP0,EM HCP1,EM HCP2,EM PRPI0,EM PRPI1,EM PRPI2,EM HCPI0,EM HCPI1,EM HCPI2,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator) + '\n')
-        self.doLogging()
+        self.setupDummy()
+        self.doLoggingDummy()
+        #self.doLogging()
 
     def startMonitor(self, args):
         self.monitor = threading.Timer(0.250, self.doMonitor)
@@ -224,8 +319,10 @@ class EMApp():
     def startDrone(self, args):
         print('Connecting to drone')
         asyncio.run(self.initDrone())
-        
+
     async def initDrone(self):
+        self.mission_task = None
+        self.mission_items = []
         while True:
             drone = System()
             print("Waiting for drone to connect at " + config['Drone']['system_address'])
@@ -236,52 +333,74 @@ class EMApp():
                     print("-- Connected to drone!")
                     break
 
+            self.droneState = 'connected'
             while True:
-                print("-- Waiting for a new mission")
-                tasks = [] # async tasks monitoring mavlink
+                print("-- Monitoring telemetry")
+                self.tasks = [] # async tasks monitoring mavlink
                 bound_function = types.MethodType(monitor_gpsPos, self)
-                tasks.append(asyncio.ensure_future( bound_function(drone) ))
+                self.tasks.append(asyncio.ensure_future( bound_function(drone) ))
 
                 bound_function = types.MethodType(monitor_gpsHead, self)
-                tasks.append(asyncio.ensure_future( bound_function(drone) ))
+                self.tasks.append(asyncio.ensure_future( bound_function(drone) ))
 
                 bound_function = types.MethodType(monitor_gpsVelocity, self)
-                tasks.append(asyncio.ensure_future( bound_function(drone) ))
+                self.tasks.append(asyncio.ensure_future( bound_function(drone) ))
+
+                bound_function = types.MethodType(monitor_gpsQuality, self)
+                self.tasks.append(asyncio.ensure_future( bound_function(drone) ))
+
+                bound_function = types.MethodType(monitor_mission_changes, self)
+                self.tasks.append(asyncio.ensure_future( bound_function(drone)))
+
+                bound_function = types.MethodType(monitor_mission_progress, self)
+                self.mission_task = asyncio.ensure_future( bound_function( drone ))
 
                 try:
-                    mission_items = await drone.mission_raw.download_mission()
-                    print("-- Found mission of " + str(len(mission_items)) + " items")
+                    #self.mission_items = await drone.mission_raw.download_mission()
+                    #print("-- Found mission of " + str(len(self.mission_items)) + " items")
 
-                    bound_function = types.MethodType(monitor_mission_progress, self)
-                    mission_task = asyncio.ensure_future( bound_function(drone, mission_items))
-                    tasks.append(mission_task)
+                    #self.tasks.append(mission_task)
                     while True:
-                        async for change in drone.mission_raw.mission_changed():
-                            if change:
-                                print("-- Abandoning old mission")
-                                mission_task.cancel()
-                                tasks.pop() # mission is always last task
-                                mission_items = await drone.mission_raw.download_mission()
-                                print("-- Got new mission of " + str(len(mission_items)) + " items")
-                                bound_function = types.MethodType(monitor_mission_progress, self)
-                                mission_task = asyncio.ensure_future( bound_function(drone, mission_items))
-                                tasks.append(mission_task)
+                        async for state in drone.core.connection_state():
+                            if not state.is_connected:
+                                print("-- drone disconnected")
+                                self.droneState = 'disconnected'
+                            break
 
-                        async for p in drone.mission_raw.mission_progress():
-                            if p.current >= p.total:
-                                print("-- Mission is finished")
-                                mission_task.cancel()
+                        #async for p in drone.mission_raw.mission_progress():
+                        #    if p.current >= p.total:
+                        #        print("-- Mission is finished")
+                        #        self.mission_task.cancel()
+                        #    else:
+                        #        print("-- mission at step " + str(p.current))
 
-                        time.sleep(0.5)
+                        #print("-- Idle")
+                        #time.sleep(0.5)
+                        await asyncio.sleep(0.5)
                 except Exception as err:
                     print(f"Unexpected {err=}, {type(err)=}")
                     # fixme - unsure what will happen when the drone disconnects?
                 finally:
-                    for t in tasks:
+                    for t in self.tasks:
                         t.cancel()
                     print("Unwound drone callbacks")
 
-    # Logging callbacks
+
+    async def reloadMission(self, drone):
+        if (len(self.mission_items) > 0): print("-- Abandoning old mission")
+
+        while(len(self.mission_items) > 0):
+            self.mission_items.pop()
+        
+        self.mission_items = await drone.mission_raw.download_mission()
+        print("-- Got new mission of " + str(len(self.mission_items)) + " items")
+
+        self.mission_task.cancel()
+        bound_function = types.MethodType(monitor_mission_progress, self)
+        self.mission_task = asyncio.ensure_future( bound_function(drone))
+        #tasks.append(mission_task)
+
+    # Logging loop
     def doLogging(self):
         t0 = datetime.datetime.now()
         self.doit()
@@ -319,20 +438,95 @@ class EMApp():
                      "," + str(self.EM_VoltsVal) + "," + str(self.EM_TemperatureVal) + \
                      "," + str(self.EM_PitchVal) + "," + str(self.EM_RollVal))
 
+    def doLoggingDummy(self):
+        t0 = datetime.datetime.now()
+        self.doitDummy()
+        OutputFrequency = 2.0
+        try:
+            OutputFrequency = float(self.OutputFrequency)
+        except:
+            pass
+        if (OutputFrequency <= 0):
+            OutputFrequency = 2
+        freqMs = 1000.0 * 1.0 / OutputFrequency
+        delayMs = 0
+        t1 = t0 + datetime.timedelta(milliseconds=freqMs)
+        if (t1 > datetime.datetime.now()):
+            delayDt =  t1 - datetime.datetime.now()
+            delayMs = max(0, int(delayDt.total_seconds() * 1000.0))
+             
+        self.running = threading.Timer(delayMs / 1000.0, self.doLoggingDummy)  
+        self.running.start()
+
+    def doitDummy(self):
+        self.recordPoint(self.dummyData['YYYY-MM-DD'][self.dummyCtr] +',' + self.dummyData['HH:MM:SS.F'][self.dummyCtr], 
+            self.writeOutput == "on", 
+            self.dummyData['Longitude 2'][self.dummyCtr], self.dummyData['Latitude 2'][self.dummyCtr],
+            self.dummyData['EM PRPH'][self.dummyCtr],self.dummyData['EM PRP1'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], 
+            self.dummyData['EM HCPH'][self.dummyCtr],self.dummyData['EM HCP1'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr])
+        self.dummyCtr = self.dummyCtr + 1
+
+
+    def setupDummy(self):
+        self.dummyCtr = 0
+        self.dummyData = {}
+        with open("Dualem21S_chickpea_14092023.csv", 'r') as csvfile:
+            reader = csv.reader(csvfile, delimiter=',', quotechar='"', skipinitialspace=True)
+            header = reader.__next__()
+            for name in header:
+                self.dummyData[name] = []
+            # read rows, append values to lists
+            for row in reader:
+                for i, value in enumerate(row):
+                    self.dummyData[header[i]].append(value)
+
+
+
     # Write to the continuous output file 
     def doit(self):
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
-        line = time_now +  "," + \
-            str(self.X1Val) + "," + str(self.Y1Val) + "," + str(self.H1Val) + "," + \
-            str(self.SpeedVal) + "," + str(self.TrackVal) + "," + self.GPSQuality +\
-                self.getE1() + \
-                '\n'
-        with open(self.saveFile, 'a') as the_file:
-            the_file.write(line)
-            the_file.flush()
-        self.markTrack(self.X1Val, self.Y1Val)
-        self.recordEM(self.EM_PRP0Val,self.EM_PRP1Val, self.EM_PRP2Val, 
-                      self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val)
+        if (self.writeOutput == "on"):
+            line = time_now +  "," + \
+                str(self.X1Val) + "," + str(self.Y1Val) + "," + str(self.H1Val) + "," + \
+                str(self.SpeedVal) + "," + str(self.TrackVal) + "," + self.GPSQuality +\
+                    self.getE1() + \
+                    '\n'
+            with open(self.saveFile, 'a') as the_file:
+                the_file.write(line)
+                the_file.flush()
+        self.recordPoint(time_now, self.writeOutput == "on", 
+                         self.X1Val, self.Y1Val,
+                         self.EM_PRP0Val,self.EM_PRP1Val, self.EM_PRP2Val, 
+                         self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val)
+        
+
+    def recordPoint(self, time, recorded, X, Y, EM_PRP0, EM_PRP1, EM_PRP2, 
+                    EM_HCP0, EM_HCP1, EM_HCP2):
+        self.record.append({'id': len(self.record),
+                         'timestamp': time,
+                         'recorded': recorded,
+                         'X': X,
+                         'Y': Y,
+                         'EM_PRP0': EM_PRP0,
+                         'EM_PRP1': EM_PRP1, 
+                         'EM_PRP2': EM_PRP2, 
+                         'EM_HCP0': EM_HCP0,
+                         'EM_HCP1': EM_HCP1, 
+                         'EM_HCP2': EM_HCP2})
+
+    # return the last records since since.
+    def getRecords(self, since):
+        res = []
+        last = len(self.record) - 1
+        while last >= 0:
+            if self.record[last]['id'] > since:
+                res.append(self.record[last])
+            else:
+                break
+            last = last - 1
+        print("returning " + str(len(res)) + " records")
+        res.reverse()
+        return(res)
 
     def openComms(self, cfg):
         print("Opening " + cfg['Mode'] + ' ' + cfg['Address'])
@@ -460,6 +654,10 @@ class EMApp():
                 self.EM_PRP2Val = 0.0
                 self.EM_PRPI2Val = 0.0
                 self.EM_RollVal = 0
+                self.EM_VoltsVal = 0
+                self.EM_TemperatureVal = 0
+                self.EM_PitchVal = 0
+                self.EM_RollVal = 0
                 s = None
                 try:
                     s = self.openComms(cfg)
@@ -510,6 +708,5 @@ class EMApp():
 app = None
 def main():
     app = EMApp()
-
 if __name__ == '__main__':
     main()
