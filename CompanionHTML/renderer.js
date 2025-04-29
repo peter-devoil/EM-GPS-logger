@@ -9,8 +9,14 @@ var mapElement = document.querySelector('#map');
 var msgElement = document.querySelector("#messages")
 var split = Split(['#split-0', '#split-1'] /*, {onDragEnd: () => myHist.setupHist(histElement)}*/);
 
-var theData = {features: {features : [], type : "FeatureCollection"}, data: [], lowerBounds: [], upperBounds: []};
+var theData = {features: {features : [], type : "FeatureCollection"}, 
+               status: {status: "", EM: "", Drone: ""}, 
+               lowerBounds: [], 
+               upperBounds: [],
+               channels: []
+           };
 
+// how often to poll the rover for new data
 var updateInterval = 1000; // milliseconds
 var lastUpdateTime = Date.now();
 var updateTimer = null; // timer ID that will update window contents / colour
@@ -35,15 +41,17 @@ function isEqCT(x, y) {
 async function pollForMore() {
     var since = 0
     try {
-        if (theData.data.length > 0) {
-            since = theData.data.last().id;
+        var features = theData.features.features;
+        if (features.length > 0) {
+            since = features.last().properties.id;
         }
         var url = location.href + "/getData?since=" + parseInt(since);
-        var json = await fetch(url)
+        var json = await fetch(url, { signal: AbortSignal.timeout(1000) })
             .then(res => res.json());
         if (json != null) updateData(json);
         lastUpdateTime = Date.now();
     } catch(err) { 
+        // fixme some more ideas in https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static
         console.log(err);
     }
     pollingInterval = setTimeout(pollForMore, updateInterval);
@@ -54,26 +62,28 @@ function stopInterval() {
 }
 
 function updateData (json) {
+    var features = theData.features.features
     var lastid = 0;
-    if (theData.data.length > 0) {
-        var x= theData.data.last();
+    if (features.length > 0) {
+        var x= features.last().properties;
         lastid = x.id;
     }
 
-    json.forEach(r => {
+    json.data.forEach(r => {
         if (r.id > lastid) { 
             r.time = moment(r.timestamp, "yyyy-MM-dd,HH:mm:ss");
             Object.keys(r).forEach(k => {
-                if (k.indexOf("PRP") >=0 || k.indexOf("HCP") >= 0) {
+                if (k.indexOf("EM_") >=0) {
                     r[k] = parseFloat(r[k]);
                 }
             });
-            theData.data.push(r); 
             var f = {"geometry" : {"coordinates": [parseFloat(r["X"]), parseFloat(r["Y"])], "type": "Point"},
-                 "properties" : r};
-            theData.features.features.push(f);
+                     "properties" : r};
+            features.push(f);
         }
     });
+
+    theData.status = json.status;
 
     //csv2geojson.csv2geojson(theData.data.slice(theData.features.length, theData.data.length), { latfield: 'Y',lonfield: 'X'}, 
     //csv2geojson.csv2geojson(theData.data, { latfield: 'Y',lonfield: 'X'}, 
@@ -81,17 +91,25 @@ function updateData (json) {
     //            theData.features = data
     //});
 
+    var newChannels = Object.keys(features[0].properties)
+        .filter(c => c.indexOf("EM_") >=0);
 
-    theData.channels = Object.keys(theData.data[0])
-       .filter(c => c.indexOf("PRP") >=0 || c.indexOf("HCP") >=0)
-       .map(s => s.replace("EM_", ""));
+    if (theData.channels.length == 0 && newChannels.length > 0) {
+        newChannels.forEach(c => {
+          theData.channels.push({
+            active: true, 
+            dataName: c,
+            displayName: c.replace("EM_", "")
+          });
+        });
+    }
 
-    theData.channels.forEach( c=> {
-        if (typeof theData.lowerBounds[c] == "undefined") {
-            theData.lowerBounds[c] = 1000;
+    theData.channels.forEach( c => {
+        if (typeof theData.lowerBounds[c.dataName] == "undefined") {
+            theData.lowerBounds[c.dataName] = 1000;
         }
-        if (typeof theData.upperBounds[c] == "undefined") {
-            theData.upperBounds[c] = -1000;
+        if (typeof theData.upperBounds[c.dataName] == "undefined") {
+            theData.upperBounds[c.dataName] = -1000;
         }
     });
     
@@ -99,94 +117,51 @@ function updateData (json) {
     myMap.addData( mapElement, theData );
 }
 
-// Start or stop the logger manually
-document.querySelector('#startStop')
-    .addEventListener('toggle', async (e) => { 
-        var w = e.target;
-        var sel = e.detail;
-        w.childNodes.forEach(x => {
-            if (typeof(x.id) != "undefined") {
-                if (sel.id != x.id) {
-                    x.toggled = false;
-                 } else {
-                    x.toggled = true;
-                 }
-            } 
-        });
-        //myMap.setMapMode(mapElement, sel.id);
-    });
-
-// Save the EM data to a file. Can be either csv or shapefile
+// Save the EM data to a file.
 document.querySelector('#save_data')
     .addEventListener('click', async () => {
         const handle = await window.showSaveFilePicker({ // fixme - if this fails, open a text/plain window for the user to save
             types: [
-                {description: "Shapefile (zipped)", accept: { "application/zip": [".zip"] }}, 
                 {description: "CSV", accept: { "text/csv": [".csv"] }}], 
             excludeAcceptAllOption: false,
             //suggestedName: "",
             startIn: 'downloads'});
 
-        var channels = emData.features.keys
-           .filter(c => c.indexOf("PRP") >=0 || c.indexOf("HCP") >=0);
-
-        channels.forEach(c => {
-            for (var i = 0; i < emData.features.length; i++) {
-                var x = emData.features[i].properties[c];
-                var value;
-                if (typeof x === 'string' || x instanceof String)
-                    value = parseFloat(x);
-                else
-                    value = x;
-                if (emData.selected[i] == true &&
-                    value >= emData.lowerBounds[c] &&
-                    value <= emData.upperBounds[c]) {
-                    /*emData.selected[i] = true; */
-                } else {
-                    emData.selected[i] = false; //fixme: this is modifying the original, should be a copy
-                }
-            }
-        });
-
-        var dataToWrite = new Object();
-        dataToWrite.features = [];
-        dataToWrite.type = emData.type;
-        for (var i = 0; i < emData.features.length; i++) {
-            if (emData.selected[i] == true) {
-                dataToWrite.features.push(emData.features[i]);
-            }
-        }
-
         const newName = handle.name;
         const writable = await handle.createWritable();  // not firefox/safari
         if (handle.name.endsWith(".csv")) {
-            var csvHdr = ["Longitude", "Latitude",]
-                 .concat(Object.keys(dataToWrite.features[0].properties));
-            var csvBody = dataToWrite.features.map(f => 
-                Object.values(f.geometry.coordinates).toString()
-                   .concat(",")
-                   .concat(Object.values(f.properties).toString())).join("\n");
-            await writable.write(csvHdr + "\n" + csvBody);
+            await writable.write(assembleCSV());
         }    
-
-        // fixme
-        // if (handle.name.endsWith(".zip")) {
-        //     const zipData = await shpwrite.zip(dataToWrite);
-        //     await writable.write(zipData);
-        // } else {
-        //     const csvData = null; 
-        // }
 
         // Close the file and write the contents to disk.
         await writable.close();
-    });
+});
 
-function convertToCSV(arr) {
+function assembleCSV() {
+   var csvHdr = 'YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM HCP0,EM HCP1,EM HCP2,EM PRPI0,EM PRPI1,EM PRPI2,EM HCPI0,EM HCPI1,EM HCPI2,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=Rootbot';
+   var features = theData.features.features;
+   var csvBody = features
+       .filter(x => x.properties.recorded) 
+       .map(f => {
+            var p = f.properties;
+            var line = [p.timestamp, p.X, p.Y, p.Z, p.Speed, p.Track, p.Quality].join(",") + "," +
+                       [p.EM_PRP0, p.EM_PRP1, p.EM_PRP2, p.EM_HCP0, p.EM_HCP1, p.EM_HCP2,
+                        p.EM_PRPI0, p.EM_PRPI1, p.EM_PRPI2, p.EM_HCPI0, p.EM_HCPI1, p.EM_HCPI2,
+                        p.EM_Volts, p.EM_Temperature, p.EM_Pitch, p.EM_Roll].join(",");
+            return(line);
+         })
+       .join("\n");
+
+   return(csvHdr + "\n" + csvBody);
+}
+
+/*unused function convertToCSV(arr) {
     const array = [Object.keys(arr[0])].concat(arr)
     return array.map(it => {
         return Object.values(it).toString()
     }).join('\n')
 }
+*/
 
 // Set a timer to monitor the last update time. Flash warnings if it's delayed.
 updateTimer = setInterval( function() {
@@ -210,9 +185,7 @@ statusTimer = setInterval( async function() {
     var sBtn = document.querySelector("#startStop");
     var old = sBtn.toggled;
 
-    // fixme - this should be bundled in with the getData call above
-    var url = location.href + "/getStatus"
-    var status = await fetch(url).then(res => res.json());
+    var status = theData.status;
 
     var lbl = sBtn.children[1];
 
@@ -233,8 +206,25 @@ statusTimer = setInterval( async function() {
     }
     var sLbl = document.querySelector("#status");
     sLbl.innerText = "Status: " + (status.status == "Running" ? "Recording EM data" : "Idle");
-    // fixme add roll indicator/warning
 
+    // roll indicator/warning
+    try {
+        var features = theData.features.features;
+        var lastf = features[features.length - 1];
+        if (Math.abs(lastf.properties.EM_Roll) > 10) { // will throw if no data
+            sLbl.innerText += " - Roll = " + lastf.properties.EM_Roll;
+            var old = sLbl.style.backgroundColor;
+            if (old != "#FF0000") {
+                sLbl.style.backgroundColor = "#FF0000";
+            }
+        } else {
+            if (sLbl.style.backgroundColor != "") {
+                sLbl.style.backgroundColor = "";
+            }
+        }
+    } catch (e) {
+        console.log(e);
+    }
 }, 1000);
 
 // Manually start/stop the recorder. Eventually, the polling loop will catch up
@@ -243,10 +233,10 @@ document.querySelector('#startStop')
    .addEventListener('click', async (event) => { 
       if(event.target.innerText == "Stop") {
            var url = location.href + "/setStatus?status=Idle"
-           fetch(url);
+           fetch(url, { signal: AbortSignal.timeout(1000) });
       } else if(event.target.innerText == "Start") {
            var url = location.href + "/setStatus?status=Running"
-           fetch(url);
+           fetch(url, { signal: AbortSignal.timeout(1000) });
       }
    });
 
@@ -254,7 +244,7 @@ let dialog = document.querySelector("#dialog");
 document.querySelector("#close-button")
     .addEventListener("click", async () => {
         var url = location.href + "/shutDown"; // fixme add a password to this
-        var json = await fetch(url);
+        var json = await fetch(url, { signal: AbortSignal.timeout(5000) });
         dialog.close();
 });
 
@@ -264,3 +254,28 @@ document.querySelector('#powerOff')
    }
 );
 
+
+function drawerToggled (e) {
+    if (e.target.id == "channelDrawer") {
+        if (e.newState == "open") {
+            var w = drawer.querySelectorAll(".chSel");
+            w.forEach(b => {
+                var chan = theData.channels.find(c => c.displayName == b.innerText);
+                if (chan) { b.toggled = chan.active; }
+
+            })
+        } else if (e.newState == "closed") {
+            var w = drawer.querySelectorAll(".chSel");
+            w.forEach(b => {
+                var chan = theData.channels.find(c => c.displayName == b.innerText);
+                if (chan) { chan.active = b.toggled; }
+            })
+        }
+    }
+}
+
+let drawer = document.querySelector("#channelDrawer");
+drawer.addEventListener("toggle", (e) => drawerToggled(e) );
+
+let closeButton = document.querySelector("#channel-close-button");
+closeButton.addEventListener("click", () => drawer.close());

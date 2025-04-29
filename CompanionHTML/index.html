@@ -3,7 +3,6 @@
 
 <head>
        <meta charset="UTF-8">
-       <!-- https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP -->
        <meta name="xel-theme" content="node_modules/xel/themes/fluent.css">
        <meta name="xel-accent-color" content="blue">
        <meta name="xel-icons" content="node_modules/xel/icons/fluent.svg">
@@ -16,7 +15,6 @@
        <!--<script src="node_modules/shpjs/dist/shp.min.js"></script>-->
        <script src="node_modules/csv2geojson/csv2geojson.js"></script>
        <script src="moment.js"></script>
-       <!--<script src="node_modules/@mapbox/shp-write/shpwrite.js"></script>-->
        <script src="trace.js"></script>
        <script src="map.js"></script>
        <title>Rootbot EM monitor</title>
@@ -28,10 +26,41 @@
               </div>
               <div id="split-1" class="flex-column">
                      <div id="trace" class="svg-container">&nbsp;Trace data appears here</div>
+                     <x-button id="channelSelector">
+                            <x-label>Channels</x-label>
+                            <x-drawer id="channelDrawer" position="bottom" manual>
+                                   <x-button id="channel-close-button" style="margin: 10px auto;">
+                                          <x-label>Close</x-label>
+                                   </x-button>
+                                   <div id="channelSelectContent">
+                                                 <x-checkbox class="chSel Pitch">Pitch</x-checkbox>
+                                                 <x-checkbox class="chSel Roll">Roll</x-checkbox>
+                                                 <x-checkbox class="chSel Temperature">Temperature</x-checkbox>
+                                                 <x-checkbox class="chSel Volts">Volts</x-checkbox>
+
+                                                 <x-checkbox class="chSel PRP0">PRP0</x-checkbox>
+                                                 <x-checkbox class="chSel HCP0">HCP0</x-checkbox>
+                                                 <x-checkbox class="chSel PRPI0">PRPI0</x-checkbox>
+                                                 <x-checkbox class="chSel HCPI0">HCPI0</x-checkbox>
+
+                                                 <x-checkbox class="chSel PRP1">PRP1</x-checkbox>
+                                                 <x-checkbox class="chSel HCP1">HCP1</x-checkbox>
+                                                 <x-checkbox class="chSel PRPI1">PRPI1</x-checkbox>
+                                                 <x-checkbox class="chSel HCPI1">HCPI1</x-checkbox>
+
+                                                 <x-checkbox class="chSel PRP2">PRP2</x-checkbox>
+                                                 <x-checkbox class="chSel HCP2">HCP2</x-checkbox>
+                                                 <x-checkbox class="chSel PRPI2">PRPI2</x-checkbox>
+                                                 <x-checkbox class="chSel HCPI2">HCPI2</x-checkbox>
+
+                                          </div>
+                            </x-drawer>
+                     </x-button>
+
               </div>
        </div>
        <div id="messages">
-              <div id="status">Status:</div>
+              <div id="status" >Status:</div>
               <div id="lastUpdate">Last update:</div>
               <div>
                      <x-tag id="startStop" toggled>

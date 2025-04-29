@@ -15,11 +15,11 @@
        function initData(element) {
              element.replaceChildren();
              width = 400;//element.offsetWidth;
-             height = 500;//element.offsetHeight;
+             height = 400;//element.offsetHeight;
              svg = d3.select(element)
                .append('svg')
                .attr("preserveAspectRatio", "xMidYMid meet") 
-               .attr("viewBox", "0 0 " + width + " " + height);
+               .attr("viewBox", [0, 0, width, height]);
                //.classed("svg-content-responsive", true);
        }
 
@@ -65,8 +65,8 @@
 
                var path = d3.geoPath(projection);
 
-               var newDataIndex = theData.data.findIndex(x => x.id > lastId);
-               lastId = theData.data[theData.data.length - 1].id;
+               var newDataIndex = theData.features.features.findIndex(x => x.properties.id > lastId);
+               lastId = theData.features.features[theData.features.features.length - 1].properties.id;
 
                // Add the EM points
                var newFeatures;

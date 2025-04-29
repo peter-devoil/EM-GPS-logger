@@ -23,11 +23,6 @@ body {
     height: calc(100vh - 150px); 
 }
 
-#channelSelector {
-    width: 150px;
-    margin: 10px 20px 10px 20px;
-}
-
 .svg-container {
     display: inline-block;
     position: relative;
@@ -53,6 +48,16 @@ body {
     display: flex;
     flex-direction: row;
     flex-grow: 1;
+    justify-content: space-between;
+}
+
+#channelSelectContent {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+}
+
+#chSel {
+    margin: 10px;
 }
 
 #status {

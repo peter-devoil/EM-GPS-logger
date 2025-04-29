@@ -70,8 +70,6 @@ def MakeHandlerClassWithBakedInApp(app):
                         since = 0
                 if (since >= 0):
                     self.getData( since )
-            elif self.path.startswith("/getStatus"):
-                self.getStatus( )
             elif self.path.startswith("/setStatus"):
                 newStatus = ""
                 try:
@@ -110,13 +108,8 @@ def MakeHandlerClassWithBakedInApp(app):
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(bytes(json.dumps(self.emApp.getRecords(since) , ensure_ascii=False), 'utf-8'))
-
-        def getStatus(self):
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.end_headers()
-            self.wfile.write(bytes(json.dumps(self.emApp.StatusInfo(), ensure_ascii=False), 'utf-8'))
+            result = {'data': self.emApp.getRecords(since), 'status': self.emApp.StatusInfo()}
+            self.wfile.write(bytes(json.dumps( result, ensure_ascii=False), 'utf-8'))
 
         def setStatus(self, newStatus):
             self.send_response(200)
@@ -461,9 +454,13 @@ class EMApp():
     def doitDummy(self):
         self.recordPoint(self.dummyData['YYYY-MM-DD'][self.dummyCtr] +',' + self.dummyData['HH:MM:SS.F'][self.dummyCtr], 
             self.writeOutput == "on", 
-            self.dummyData['Longitude 2'][self.dummyCtr], self.dummyData['Latitude 2'][self.dummyCtr],
+            self.dummyData['Longitude 2'][self.dummyCtr], self.dummyData['Latitude 2'][self.dummyCtr],self.dummyData['Elevation 2'][self.dummyCtr],
+            self.dummyData['Speed 2'][self.dummyCtr], self.dummyData['Track 2'][self.dummyCtr], 'Unknown',
             self.dummyData['EM PRPH'][self.dummyCtr],self.dummyData['EM PRP1'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], 
-            self.dummyData['EM HCPH'][self.dummyCtr],self.dummyData['EM HCP1'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr])
+            self.dummyData['EM HCPH'][self.dummyCtr],self.dummyData['EM HCP1'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr],
+            self.dummyData['EM PRPIH'][self.dummyCtr],self.dummyData['EM PRPI1'][self.dummyCtr], self.dummyData['EM PRPI2'][self.dummyCtr], 
+            self.dummyData['EM HPCIH'][self.dummyCtr],self.dummyData['EM HCPI1'][self.dummyCtr], self.dummyData['EM HCPI2'][self.dummyCtr],
+            self.dummyData['EM Volts'][self.dummyCtr],self.dummyData['EM Temperature'][self.dummyCtr],self.dummyData['EM Pitch'][self.dummyCtr], self.dummyData['EM Roll'][self.dummyCtr])
         self.dummyCtr = self.dummyCtr + 1
 
 
@@ -495,24 +492,46 @@ class EMApp():
                 the_file.write(line)
                 the_file.flush()
         self.recordPoint(time_now, self.writeOutput == "on", 
-                         self.X1Val, self.Y1Val,
+                         self.X1Val, self.Y1Val, self.H1Val,
+                         self.SpeedVal, TrackVal, self.GPSQuality,
                          self.EM_PRP0Val,self.EM_PRP1Val, self.EM_PRP2Val, 
-                         self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val)
+                         self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val,
+                         self.EM_PRPI0Val,self.EM_PRPI1Val, self.EM_PRPI2Val, 
+                         self.EM_HCPI0Val,self.EM_HCPI1Val, self.EM_HCPI2Val,
+                         self.EM_Volts, self.EM_Temperature, self.EM_Pitch, self.EM_Roll)
         
 
-    def recordPoint(self, time, recorded, X, Y, EM_PRP0, EM_PRP1, EM_PRP2, 
-                    EM_HCP0, EM_HCP1, EM_HCP2):
+    def recordPoint(self, time, recorded, X, Y, Z, Speed, Track, Quality, 
+                    EM_PRP0, EM_PRP1, EM_PRP2, 
+                    EM_HCP0, EM_HCP1, EM_HCP2,
+                    EM_PRPI0, EM_PRPI1, EM_PRPI2, 
+                    EM_HCPI0, EM_HCPI1, EM_HCPI2,
+                    EM_Volts, EM_Temperature, EM_Pitch, EM_Roll):
         self.record.append({'id': len(self.record),
                          'timestamp': time,
                          'recorded': recorded,
                          'X': X,
                          'Y': Y,
+                         'Z': Z,
+                         'Speed': Speed, 
+                         'Track': Track, 
+                         'Quality': Quality,
                          'EM_PRP0': EM_PRP0,
                          'EM_PRP1': EM_PRP1, 
                          'EM_PRP2': EM_PRP2, 
                          'EM_HCP0': EM_HCP0,
                          'EM_HCP1': EM_HCP1, 
-                         'EM_HCP2': EM_HCP2})
+                         'EM_HCP2': EM_HCP2,
+                         'EM_PRPI0': EM_PRPI0,
+                         'EM_PRPI1': EM_PRPI1, 
+                         'EM_PRPI2': EM_PRPI2, 
+                         'EM_HCPI0': EM_HCPI0,
+                         'EM_HCPI1': EM_HCPI1, 
+                         'EM_HCPI2': EM_HCPI2,
+                         'EM_Volts': EM_Volts, 
+                         'EM_Temperature': EM_Temperature, 
+                         'EM_Pitch': EM_Pitch,
+                         'EM_Roll': EM_Roll})
 
     # return the last records since since.
     def getRecords(self, since):
