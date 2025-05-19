@@ -19,6 +19,7 @@ import configparser
 import unicodedata
 import string
 import csv
+import serial
 
 #from tendo import singleton
 # 
@@ -27,7 +28,7 @@ import csv
 config = configparser.ConfigParser()
 if not os.path.exists('Dualem_companion.ini'):
     #config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
-    config['EM'] = {'Mode': 'Undefined', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
+    config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyUSB0', 'Baud' : 38400}
     config['Drone'] = {'system_address': 'udp://:14540'}
     #config['Drone'] = {'system_address': 'serial:///dev/ttyAGM0:58600'}
 
@@ -50,6 +51,10 @@ def dm(x):
 
 def decimal_degrees(degrees, minutes):
     return degrees + minutes/60 
+
+# An IP6 server.
+class HTTPServerV6(HTTPServer):
+    address_family = socket.AF_INET6
 
 # A mini http server
 def MakeHandlerClassWithBakedInApp(app):
@@ -196,9 +201,23 @@ class EMApp():
 
         self.TrackVal= 0.0
         self.SpeedVal= 0.0
-        self.EM_VoltsVal= 0.0
-        self.EM_PitchVal= 0.0
-        self.EM_RollVal= 0.0
+        self.EM_HCP0Val = 0.0
+        self.EM_HCPI0Val = 0.0
+        self.EM_PRP0Val = 0.0
+        self.EM_PRPI0Val = 0.0
+        self.EM_HCP1Val = 0.0
+        self.EM_HCPI1Val = 0.0
+        self.EM_PRP1Val = 0.0
+        self.EM_PRPI1Val = 0.0
+        self.EM_HCP2Val = 0.0
+        self.EM_HCPI2Val = 0.0
+        self.EM_PRP2Val = 0.0
+        self.EM_PRPI2Val = 0.0
+        self.EM_RollVal = 0
+        self.EM_VoltsVal = 0
+        self.EM_TemperatureVal = 0
+        self.EM_PitchVal = 0
+        self.EM_RollVal = 0
 
         # When set, fires a regular reading to the continuous file
         self.running = None
@@ -270,9 +289,9 @@ class EMApp():
         if not os.path.exists(self.saveFile):
             with open(self.saveFile, 'w') as the_file:
                the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM HCP0,EM HCP1,EM HCP2,EM PRPI0,EM PRPI1,EM PRPI2,EM HCPI0,EM HCPI1,EM HCPI2,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator) + '\n')
-        self.setupDummy()
-        self.doLoggingDummy()
-        #self.doLogging()
+        #self.setupDummy()
+        #self.doLoggingDummy()
+        self.doLogging()
 
     def startMonitor(self, args):
         self.monitor = threading.Timer(0.250, self.doMonitor)
@@ -297,10 +316,10 @@ class EMApp():
             pass
 
     def startHTTPServer(self, args):
-       hostName = ""
-       serverPort = 8080
-       webServer = HTTPServer((hostName, serverPort), MakeHandlerClassWithBakedInApp(self))
-       print("Listening on http://%s:%s" % (hostName, serverPort))
+       # ip6 will accept ip4 connections as well, provided it's not bound to
+       # a specific v6 address
+       webServer = HTTPServerV6(("::", 8080), MakeHandlerClassWithBakedInApp(self))
+       print("Listening on http://" + webServer.server_address[0] + ":" + str(webServer.server_address[1]))
 
        try:
           webServer.serve_forever()
@@ -493,12 +512,12 @@ class EMApp():
                 the_file.flush()
         self.recordPoint(time_now, self.writeOutput == "on", 
                          self.X1Val, self.Y1Val, self.H1Val,
-                         self.SpeedVal, TrackVal, self.GPSQuality,
+                         self.SpeedVal, self.TrackVal, self.GPSQuality,
                          self.EM_PRP0Val,self.EM_PRP1Val, self.EM_PRP2Val, 
                          self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val,
                          self.EM_PRPI0Val,self.EM_PRPI1Val, self.EM_PRPI2Val, 
                          self.EM_HCPI0Val,self.EM_HCPI1Val, self.EM_HCPI2Val,
-                         self.EM_Volts, self.EM_Temperature, self.EM_Pitch, self.EM_Roll)
+                         self.EM_VoltsVal, self.EM_TemperatureVal, self.EM_PitchVal, self.EM_RollVal)
         
 
     def recordPoint(self, time, recorded, X, Y, Z, Speed, Track, Quality, 
@@ -704,7 +723,7 @@ class EMApp():
 
                         linedata = line[:line.find('\n')]
                         line = line[line.find('\n')+1:]
-
+                        
                         if self.nmea_decode(linedata, useGPS=False): 
                             self.lastEMTime = datetime.datetime.now()
 
