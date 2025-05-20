@@ -1,0 +1,13 @@
+
+# Installation
+sudo ln -s /home/qaafi/src/EM-GPS-logger/Companion.service /etc/systemd/system/
+sudo systemctl --system daemon-reload
+sudo systemctl --system enable Companion.service
+sudo systemctl --system start Companion.service
+
+# 
+journalctl -u Companion.service 
+
+sudo systemctl --system stop Companion.service
+
+

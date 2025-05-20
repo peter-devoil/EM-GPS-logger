@@ -1,0 +1,23 @@
+[Unit]
+Description=DualEM companion service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Command to execute when the service is started
+ExecStart=/usr/bin/python3 /home/qaafi/src/EM-GPS-logger/Dualem_companion.py
+WorkingDirectory=/home/qaafi/src/EM-GPS-logger/
+# Disable Python's buffering of STDOUT and STDERR, so that output from the
+# service shows up immediately in systemd's logs
+Environment=PYTHONUNBUFFERED=1
+
+# Automatically restart the service if it crashes
+Restart=on-failure
+
+# Use a dedicated user to run our service
+User=qaafi
+
+[Install]
+WantedBy=multi-user.target
+

@@ -36,8 +36,8 @@ if not os.path.exists('Dualem_companion.ini'):
     config['Output'] = {'Frequency' : 2, 'Directory' : '/media/qaafi/usb'}
     #config['Output'] = {'Frequency' : 2, 'Directory' : os.getcwd()}
 
-    with open('Dualem_companion.ini', 'w') as configfile:
-        config.write(configfile)
+#    with open('Dualem_companion.ini', 'w') as configfile:
+#        config.write(configfile)
 
 else:
     config.read('Dualem_companion.ini')
@@ -81,9 +81,9 @@ def MakeHandlerClassWithBakedInApp(app):
                     p = urllib.parse.urlparse(self.requestline)
                     q = dict(urllib.parse.parse_qsl(p.query.split(" ")[0]))
                     newStatus = q['status']
+                    self.setStatus( newStatus )
                 except:
                     print("?newStatus = " + self.requestline)
-                self.setStatus( newStatus )
             elif self.path.startswith("/shutDown"):  # fixme add a password to this
                 self.doShutDown( )
             else:
@@ -110,22 +110,24 @@ def MakeHandlerClassWithBakedInApp(app):
                     self.send_response(404)
 
         def getData(self, since):
+            result = {'data': self.emApp.getRecords(since), 'status': self.emApp.StatusInfo()}
+            bData = bytes(json.dumps( result, ensure_ascii=False), 'utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            result = {'data': self.emApp.getRecords(since), 'status': self.emApp.StatusInfo()}
-            self.wfile.write(bytes(json.dumps( result, ensure_ascii=False), 'utf-8'))
+            self.wfile.write( bData )
 
         def setStatus(self, newStatus):
+            bData = bytes(json.dumps(self.emApp.setStatus(newStatus), ensure_ascii=False), 'utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()
-            self.wfile.write(bytes(json.dumps(self.emApp.setStatus(newStatus), ensure_ascii=False), 'utf-8'))
+            self.wfile.write( bData )
 
     return Handler
 
 def doShutDown():
-#    os.system( "/usr/sbin/shutdown -h +1") fixme - sudo?
+    os.system( "sudo /usr/sbin/shutdown -h +1")
     os._exit(1)
 
 # watch for a new mission appearing
