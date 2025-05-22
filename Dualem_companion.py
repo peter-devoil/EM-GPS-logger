@@ -35,7 +35,7 @@ if not os.path.exists('Dualem_companion.ini'):
     config['Operator'] = {'Name' : getpass.getuser()}
     config['Output'] = {'Frequency' : 2, 'Directory' : '/media/qaafi/usb'}
     #config['Output'] = {'Frequency' : 2, 'Directory' : os.getcwd()}
-
+    config['Dummy'] = {'active': True, 'dummyFile': 'Dualem21S_chickpea_14092023.csv'}
 #    with open('Dualem_companion.ini', 'w') as configfile:
 #        config.write(configfile)
 
@@ -231,9 +231,10 @@ class EMApp():
         self.errMsgSource = []
 
         self.workers = []
-        self.EMThread = threading.Thread(target=self.em1_read, args=('EM',), daemon = True)
-        self.EMThread.start()
-        self.workers.append(self.EMThread)
+        if not config['Dummy']['active']:
+            self.EMThread = threading.Thread(target=self.em1_read, args=('EM',), daemon = True)
+            self.EMThread.start()
+            self.workers.append(self.EMThread)
         self.lastEMTime = datetime.datetime.now()
         self.lastGPSTime = datetime.datetime.now()
 
@@ -291,9 +292,11 @@ class EMApp():
         if not os.path.exists(self.saveFile):
             with open(self.saveFile, 'w') as the_file:
                the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM HCP0,EM HCP1,EM HCP2,EM PRPI0,EM PRPI1,EM PRPI2,EM HCPI0,EM HCPI1,EM HCPI2,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator) + '\n')
-        #self.setupDummy()
-        #self.doLoggingDummy()
-        self.doLogging()
+        if (config['Dummy']['active']):
+            self.setupDummy()
+            self.doLoggingDummy()
+        else:
+            self.doLogging()
 
     def startMonitor(self, args):
         self.monitor = threading.Timer(0.250, self.doMonitor)
@@ -488,7 +491,7 @@ class EMApp():
     def setupDummy(self):
         self.dummyCtr = 0
         self.dummyData = {}
-        with open("Dualem21S_chickpea_14092023.csv", 'r') as csvfile:
+        with open(config['Dummy']['dummyFile'], 'r') as csvfile:
             reader = csv.reader(csvfile, delimiter=',', quotechar='"', skipinitialspace=True)
             header = reader.__next__()
             for name in header:

@@ -22,7 +22,7 @@ var lastUpdateTime = Date.now();
 var updateTimer = null; // timer ID that will update window contents / colour
 var statusTimer = null; // "     "   for monitoring companion status
 
-var pollingInterval = setTimeout(pollForMore, updateInterval);
+var pollingID = setTimeout(pollForMore, updateInterval);
 
 myTrace.initData( traceElement );
 myMap.initData( mapElement );
@@ -38,6 +38,7 @@ function isEqCT(x, y) {
     return(Math.abs(x - y) <  1.0E-6 /*Number.EPSILON*/);
 }
 
+let backoffDelay = 0;
 async function pollForMore() {
     var since = 0
     try {
@@ -46,19 +47,25 @@ async function pollForMore() {
             since = features.last().properties.id;
         }
         var url = location.href + "/getData?since=" + parseInt(since);
-        var json = await fetch(url, { signal: AbortSignal.timeout(1000) })
+        var json = await fetch(url, { signal: AbortSignal.timeout(4000) })
             .then(res => res.json());
         if (json != null) updateData(json);
         lastUpdateTime = Date.now();
+        backoffDelay = 0;
     } catch(err) { 
-        // fixme some more ideas in https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal/timeout_static
-        console.log(err);
+        if (err.name === "TimeoutError") {
+            console.log("Polling Timeout");
+            backoffDelay = 5000;
+        } else {
+            // A network error, or some other problem.
+            console.log(`Polling Error: type: ${err.name}, message: ${err.message}`);
+        }
     }
-    pollingInterval = setTimeout(pollForMore, updateInterval);
+    pollingID = setTimeout(pollForMore, updateInterval + backoffDelay);
 }
 
 function stopInterval() {
-    clearTimeout(pollingInterval);
+    clearTimeout(pollingID);
 }
 
 function updateData (json) {
