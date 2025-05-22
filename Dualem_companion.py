@@ -52,6 +52,14 @@ def dm(x):
 def decimal_degrees(degrees, minutes):
     return degrees + minutes/60 
 
+def str_to_bool(s):
+    if s == 'True':
+         return True
+    elif s == 'False':
+         return False
+    else:
+         raise ValueError("Cannot convert {} to a bool".format(s)) 
+    
 # An IP6 server.
 class HTTPServerV6(HTTPServer):
     address_family = socket.AF_INET6
@@ -231,7 +239,7 @@ class EMApp():
         self.errMsgSource = []
 
         self.workers = []
-        if not config['Dummy']['active']:
+        if not str_to_bool(config['Dummy']['active']):
             self.EMThread = threading.Thread(target=self.em1_read, args=('EM',), daemon = True)
             self.EMThread.start()
             self.workers.append(self.EMThread)
@@ -292,7 +300,7 @@ class EMApp():
         if not os.path.exists(self.saveFile):
             with open(self.saveFile, 'w') as the_file:
                the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM HCP0,EM HCP1,EM HCP2,EM PRPI0,EM PRPI1,EM PRPI2,EM HCPI0,EM HCPI1,EM HCPI2,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator) + '\n')
-        if (config['Dummy']['active']):
+        if (str_to_bool(config['Dummy']['active'])):
             self.setupDummy()
             self.doLoggingDummy()
         else:
