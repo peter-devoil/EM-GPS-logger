@@ -342,7 +342,7 @@ class EMApp():
 
 
     def startDrone(self, args):
-        print('Connecting to drone')
+        print('drone: Connecting')
         asyncio.run(self.initDrone())
 
     async def initDrone(self):
@@ -350,17 +350,17 @@ class EMApp():
         self.mission_items = []
         while True:
             drone = System()
-            print("Waiting for drone to connect at " + config['Drone']['system_address'])
+            print("drone:  Waiting for connect at " + config['Drone']['system_address'])
 
             await drone.connect(system_address=config['Drone']['system_address'])
             async for state in drone.core.connection_state():
                 if state.is_connected:
-                    print("-- Connected to drone!")
+                    print("drone: Connected")
                     break
 
             self.droneState = 'connected'
             while True:
-                print("-- Monitoring telemetry")
+                print("drone: Monitoring telemetry")
                 self.tasks = [] # async tasks monitoring mavlink
                 bound_function = types.MethodType(monitor_gpsPos, self)
                 self.tasks.append(asyncio.ensure_future( bound_function(drone) ))
@@ -388,7 +388,7 @@ class EMApp():
                     while True:
                         async for state in drone.core.connection_state():
                             if not state.is_connected:
-                                print("-- drone disconnected")
+                                print("drone: disconnected")
                                 self.droneState = 'disconnected'
                             break
 
@@ -403,22 +403,22 @@ class EMApp():
                         #time.sleep(0.5)
                         await asyncio.sleep(0.5)
                 except Exception as err:
-                    print(f"Unexpected {err=}, {type(err)=}")
+                    print(f"drone: Unexpected {err=}, {type(err)=}")
                     # fixme - unsure what will happen when the drone disconnects?
                 finally:
                     for t in self.tasks:
                         t.cancel()
-                    print("Unwound drone callbacks")
+                    print("drone: Unwound callbacks")
 
 
     async def reloadMission(self, drone):
-        if (len(self.mission_items) > 0): print("-- Abandoning old mission")
+        if (len(self.mission_items) > 0): print("drone: Abandoning old mission")
 
         while(len(self.mission_items) > 0):
             self.mission_items.pop()
         
         self.mission_items = await drone.mission_raw.download_mission()
-        print("-- Got new mission of " + str(len(self.mission_items)) + " items")
+        print("drone: Got new mission of " + str(len(self.mission_items)) + " items")
 
         self.mission_task.cancel()
         bound_function = types.MethodType(monitor_mission_progress, self)
