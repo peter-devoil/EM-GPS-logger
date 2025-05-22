@@ -113,10 +113,10 @@ function updateData (json) {
 
     theData.channels.forEach( c => {
         if (typeof theData.lowerBounds[c.dataName] == "undefined") {
-            theData.lowerBounds[c.dataName] = 1000;
+            theData.lowerBounds[c.dataName] = 1000000;
         }
         if (typeof theData.upperBounds[c.dataName] == "undefined") {
-            theData.upperBounds[c.dataName] = -1000;
+            theData.upperBounds[c.dataName] = -1000000;
         }
     });
     
