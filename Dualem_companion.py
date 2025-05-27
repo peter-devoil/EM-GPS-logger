@@ -93,7 +93,7 @@ def MakeHandlerClassWithBakedInApp(app):
                 except:
                     print("?newStatus = " + self.requestline)
             elif self.path.startswith("/shutDown"):  # fixme add a password to this
-                self.doShutDown( )
+                self.emApp.doShutDown( )
             else:
                 if self.path == "/":
                     self.path = "index.html"

@@ -127,21 +127,35 @@ function updateData (json) {
 // Save the EM data to a file.
 document.querySelector('#save_data')
     .addEventListener('click', async () => {
-        const handle = await window.showSaveFilePicker({ // fixme - if this fails, open a text/plain window for the user to save
-            types: [
-                {description: "CSV", accept: { "text/csv": [".csv"] }}], 
-            excludeAcceptAllOption: false,
-            //suggestedName: "",
-            startIn: 'downloads'});
+        if (typeof window.showSaveFilePicker != "undefined") {
+            const handle = await window.showSaveFilePicker({ 
+                types: [
+                    {description: "CSV", accept: { "text/csv": [".csv"] }}], 
+                excludeAcceptAllOption: false,
+                //suggestedName: "",
+                startIn: 'downloads'});
 
-        const newName = handle.name;
-        const writable = await handle.createWritable();  // not firefox/safari
-        if (handle.name.endsWith(".csv")) {
-            await writable.write(assembleCSV());
-        }    
+            const newName = handle.name;
+            const writable = await handle.createWritable();  // not firefox/safari
+            if (handle.name.endsWith(".csv")) {
+                await writable.write(assembleCSV());
+            }    
 
-        // Close the file and write the contents to disk.
-        await writable.close();
+            // Close the file and write the contents to disk.
+            await writable.close();
+        } else {
+            console.log("opening new window");
+            let encoded = encodeURIComponent("<pre>"+assembleCSV() + "</pre>"); 
+            let a = document.createElement(`a`);
+            a.target = `_blank`;
+            a.href = `data:text/plain;charset=utf-8,${encoded}`;
+            a.style.display = `none`;
+            document.body.appendChild(a); // We need to do this,
+            a.click();                    // so that we can do this,
+            document.body.removeChild(a); // after which we do this.
+            //var w = window.open("about:blank", "", "_blank")
+            //w.document.write("<pre>" + assembleCSV() + "</pre>");
+        }
 });
 
 function assembleCSV() {
@@ -217,16 +231,18 @@ statusTimer = setInterval( async function() {
     // roll indicator/warning
     try {
         var features = theData.features.features;
-        var lastf = features[features.length - 1];
-        if (Math.abs(lastf.properties.EM_Roll) > 10) { // will throw if no data
-            sLbl.innerText += " - Roll = " + lastf.properties.EM_Roll;
-            var old = sLbl.style.backgroundColor;
-            if (old != "#FF0000") {
-                sLbl.style.backgroundColor = "#FF0000";
-            }
-        } else {
-            if (sLbl.style.backgroundColor != "") {
-                sLbl.style.backgroundColor = "";
+        if (features.length > 0) {
+            var lastf = features[features.length - 1];
+            if (Math.abs(lastf.properties.EM_Roll) > 10) { // will throw if no data
+                sLbl.innerText += " - Roll = " + lastf.properties.EM_Roll;
+                var old = sLbl.style.backgroundColor;
+                if (old != "#FF0000") {
+                    sLbl.style.backgroundColor = "#FF0000";
+                }
+            } else {
+                if (sLbl.style.backgroundColor != "") {
+                    sLbl.style.backgroundColor = "";
+                }
             }
         }
     } catch (e) {
@@ -252,6 +268,10 @@ document.querySelector("#close-button")
     .addEventListener("click", async () => {
         var url = location.href + "/shutDown"; // fixme add a password to this
         var json = await fetch(url, { signal: AbortSignal.timeout(5000) });
+        dialog.close();
+});
+document.querySelector("#cancel-button")
+    .addEventListener("click", async () => {
         dialog.close();
 });
 
