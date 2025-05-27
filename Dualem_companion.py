@@ -381,10 +381,10 @@ class EMApp():
                 self.mission_task = asyncio.ensure_future( bound_function( drone ))
 
                 try:
-                    #self.mission_items = await drone.mission_raw.download_mission()
-                    #print("-- Found mission of " + str(len(self.mission_items)) + " items")
+                    self.mission_items = await drone.mission_raw.download_mission()
+                    print("-- Found mission of " + str(len(self.mission_items)) + " items")
 
-                    #self.tasks.append(mission_task)
+                    self.tasks.append(self.mission_task)
                     while True:
                         async for state in drone.core.connection_state():
                             if not state.is_connected:
@@ -392,12 +392,12 @@ class EMApp():
                                 self.droneState = 'disconnected'
                             break
 
-                        #async for p in drone.mission_raw.mission_progress():
-                        #    if p.current >= p.total:
-                        #        print("-- Mission is finished")
-                        #        self.mission_task.cancel()
-                        #    else:
-                        #        print("-- mission at step " + str(p.current))
+                        async for p in drone.mission_raw.mission_progress():
+                            if p.current >= p.total:
+                                print("-- Mission is finished")
+                                self.mission_task.cancel()
+                            else:
+                                print("-- mission at step " + str(p.current))
 
                         #print("-- Idle")
                         #time.sleep(0.5)
