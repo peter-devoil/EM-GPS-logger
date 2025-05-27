@@ -127,7 +127,7 @@ function updateData (json) {
 // Save the EM data to a file.
 document.querySelector('#save_data')
     .addEventListener('click', async () => {
-        if (typeof window.showSaveFilePicker != "undefined") {
+        if (typeof window.showSaveFilePicker === 'function') {
             const handle = await window.showSaveFilePicker({ 
                 types: [
                     {description: "CSV", accept: { "text/csv": [".csv"] }}], 
@@ -145,14 +145,20 @@ document.querySelector('#save_data')
             await writable.close();
         } else {
             console.log("opening new window");
-            let encoded = encodeURIComponent("<pre>"+assembleCSV() + "</pre>"); 
-            let a = document.createElement(`a`);
-            a.target = `_blank`;
-            a.href = `data:text/plain;charset=utf-8,${encoded}`;
-            a.style.display = `none`;
-            document.body.appendChild(a); // We need to do this,
-            a.click();                    // so that we can do this,
-            document.body.removeChild(a); // after which we do this.
+            let encoded = encodeURIComponent(assembleCSV()); 
+            var dataStr = "data:text/csv;charset=utf-8," + encoded;
+
+            var dlAnchorElem = document.getElementById('downloadAnchorElem');
+            dlAnchorElem.setAttribute("href", dataStr);
+            dlAnchorElem.setAttribute("download", "rootBotData.csv");
+            dlAnchorElem.click();
+            //let a = document.createElement(`a`);
+            //a.target = `_blank`;
+            //a.href = `data:text/csv;charset=utf-8,${encoded}`;
+            //a.style.display = `none`;
+            //document.body.appendChild(a); // We need to do this,
+            //a.click();                    // so that we can do this,
+            //document.body.removeChild(a); // after which we do this.
             //var w = window.open("about:blank", "", "_blank")
             //w.document.write("<pre>" + assembleCSV() + "</pre>");
         }
