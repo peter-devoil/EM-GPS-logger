@@ -166,6 +166,8 @@ async def monitor_gpsPos(emApp, drone):
        emApp.Y1Val = p.latitude_deg 
        emApp.H1Val = p.absolute_altitude_m
        emApp.lastGPSTime = datetime.datetime.now()
+       #print(f"drone: {p}")
+
 
 # Store away GPS heading
 async def monitor_gpsHead(emApp, drone):
@@ -174,13 +176,14 @@ async def monitor_gpsHead(emApp, drone):
 
 # Store away velocity
 async def monitor_gpsVelocity(emApp, drone):
-   async for p in drone.telemetry.velocityned():
+   async for p in drone.telemetry.velocity_ned():
        emApp.SpeedVal= math.sqrt(p.north_m_s * p.north_m_s + p.east_m_s * p.east_m_s + p.down_m_s * p.down_m_s)
 
 # Will likely always be RTK fixed - rover will stop if GPS disappears
 async def monitor_gpsQuality(self, drone):
-    async for p in drone.telemetry.gpsinfo():
+    async for p in drone.telemetry.gps_info():
         self.GPSQuality = str(p.fix_type)
+        #print(f"drone: qlty: {p}")
 
 
 ################## Initialisation here ##################
@@ -390,7 +393,7 @@ class EMApp():
                             if not state.is_connected:
                                 print("drone: disconnected")
                                 self.droneState = 'disconnected'
-                            break
+                                break
 
                         async for p in drone.mission_raw.mission_progress():
                             if p.current >= p.total:
