@@ -29,6 +29,7 @@ config = configparser.ConfigParser()
 if not os.path.exists('Dualem_companion.ini'):
     #config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
     config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyUSB0', 'Baud' : 38400}
+    config['GPS'] = {'Mode': 'Undefined', 'Address' : '/dev/ttyUSB1', 'Baud' : 38400}
     config['Drone'] = {'system_address': 'udp://:14540'}
     #config['Drone'] = {'system_address': 'serial:///dev/ttyAGM0:58600'}
 
@@ -195,6 +196,7 @@ class EMApp():
         # Setting this flag will stop the reader threads
         self.stopFlag = threading.Event()
         self.restartEMFlag = threading.Event()
+        self.restartGPSFlag = threading.Event()
 
         self.numEMErrors = 0
         self.lastBellTime = datetime.datetime.now() #- datetime.timedelta(seconds=10)
@@ -247,6 +249,11 @@ class EMApp():
             self.EMThread.start()
             self.workers.append(self.EMThread)
         self.lastEMTime = datetime.datetime.now()
+
+        if config['GPS']['Mode'] != "Undefined":
+            self.GPSthread = threading.Thread(target=self.gps_read, args=('GPS',), daemon = True)
+            self.GPSthread.start()
+            self.workers.append(self.GPSthread)
         self.lastGPSTime = datetime.datetime.now()
 
         self.MonitorThread = threading.Thread(target=self.startMonitor, args=('Monitor',), daemon = True)
@@ -318,7 +325,15 @@ class EMApp():
               return
         try:
             if (datetime.datetime.now() - self.lastErrorTime).total_seconds() > 10:
+                while "GPS" in self.errMsgSource: self.errMsgSource.remove("GPS")
                 while "EM" in self.errMsgSource: self.errMsgSource.remove("EM")
+
+            if not self.hasGPSError() and \
+                    config['GPS']['Mode'] != "Undefined" and \
+                    (datetime.datetime.now() - self.lastGPSTime).total_seconds() > 5:
+                print("GPS Timeout")
+                self.errMsgSource.append("GPS")
+                self.restartGPSFlag.set()
 
             if not self.hasEMError() and \
                     config['EM']['Mode'] != "Undefined" and \
@@ -456,6 +471,9 @@ class EMApp():
 
     def hasEMError (self):
         return "EM" in self.errMsgSource
+    
+    def hasGPSError (self):
+        return "GPS" in self.errMsgSource
 
     def getE1(self):
         with lock:
@@ -686,6 +704,69 @@ class EMApp():
                 self.EM_RollVal = float(splitlines[4].split('*')[0])
             return 1
         return 0
+
+    # The gps reader thread
+    def gps_read(self, cfgName):
+        while not self.stopFlag.is_set():
+            cfg = config[cfgName]
+            if (cfg['Mode'] == "Undefined") | ("No devices" in cfg['Address']):
+               self.lastGPSTime = datetime.datetime.now()
+            else:
+                self.restartGPSFlag.clear()
+                self.lastGPSTime = datetime.datetime.now()
+                while "GPS" in self.errMsgSource: self.errMsgSource.remove("GPS")
+                self.X1Val = 0.0
+                self.Y1Val = 0.0
+                self.H1Val = 0.0
+                s = None
+                try:
+                    encoding = 'ascii'
+                    line = ""
+                    s = self.openComms(cfg)
+                    while (not self.stopFlag.is_set()) and not self.restartGPSFlag.is_set():
+                        while (line.find('\n') < 0) and not self.restartGPSFlag.is_set():
+                            if (cfg['Mode'] == "Serial"):
+                                if (s.in_waiting <= 0):
+                                    time.sleep(0.01)
+                                else:
+                                    byt = s.read(s.in_waiting)
+                                    line += str(byt, encoding) # serial "socket"
+                            else:
+                                try:
+                                    line += str(s.recv(1), encoding)  # BT, IP socket - has timeout set
+                                except socket.timeout as e:
+                                    err = e.args[0]
+                                    # this next if/else is a bit redundant, but illustrates how the
+                                    # timeout exception is setup
+                                    if err == 'timed out':
+                                        time.sleep(1)
+                                        print("gps: timeout detected")
+                                        continue
+                                    else:
+                                        raise e
+                                #except socket.error as e:
+                                #    # Something else happened, handle error, exit, etc.
+                                #    print(e)
+                                #else:
+                                #    if len(msg) == 0:
+                                #        print('orderly shutdown on server end')
+                                #        sys.exit(0)
+                                #    else:
+                                #        # got a message do something :)
+
+                        linedata = line[1:line.find('\n')]
+                        line = line[line.find('\n')+1:]
+
+                        if self.nmea_decode(linedata):
+                            self.lastGPSTime = datetime.datetime.now()
+
+                except Exception as e:
+                    print("gps: " + str(e))
+                    self.errMsgSource.append("GPS")
+                    pass
+                if s is not None:
+                    s.close()
+            time.sleep(1)
 
     # The em reader thread
     def em1_read(self, cfgName):

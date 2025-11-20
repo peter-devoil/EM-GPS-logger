@@ -5,9 +5,10 @@ sudo systemctl --system daemon-reload
 sudo systemctl --system enable Companion.service
 sudo systemctl --system start Companion.service
 
-# 
+# logs
 journalctl -u Companion.service 
 
+# Turn Off
 sudo systemctl --system stop Companion.service
 
 
