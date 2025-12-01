@@ -259,6 +259,10 @@ class EMApp(ttk.Frame):
         HCP2Ent.grid(row=3, column = 5, pady=5)
 
        # Undisplayed 
+        self.EM_PRP4Val = tk.DoubleVar()
+        self.EM_PRPI4Val = tk.DoubleVar()
+        self.EM_HCP4Val = tk.DoubleVar()
+        self.EM_HCPI4Val = tk.DoubleVar()
         self.TrackVal= tk.DoubleVar()
         self.SpeedVal= tk.DoubleVar()
         self.EM_VoltsVal= tk.DoubleVar()
@@ -634,7 +638,7 @@ class EMApp(ttk.Frame):
     def startLogging(self):
         if not os.path.exists(self.saveFile.get()):
             with open(self.saveFile.get(), 'w') as the_file:
-               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM HCP0,EM HCP1,EM HCP2,EM PRPI0,EM PRPI1,EM PRPI2,EM HCPI0,EM HCPI1,EM HCPI2,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator.get()) + '\n')
+               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM PRP4,EM HCP0,EM HCP1,EM HCP2,EM HCP4,EM PRPI0,EM PRPI1,EM PRPI2,EM PRPI4,EM HCPI0,EM HCPI1,EM HCPI2,EM HCPI4,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator.get()) + '\n')
         self.doLogging()
 
     def pauseLogging(self):
@@ -717,10 +721,10 @@ class EMApp(ttk.Frame):
         sys.exit(0)
 
     def getE1(self):
-        return("," + str(self.EM_PRP0Val.get()) + "," + str(self.EM_PRP1Val.get()) + "," + str(self.EM_PRP2Val.get()) +  \
-                "," + str(self.EM_HCP0Val.get()) + "," + str(self.EM_HCP1Val.get()) + "," + str(self.EM_HCP2Val.get()) +  \
-                "," + str(self.EM_PRPI0Val.get()) + "," + str(self.EM_PRPI1Val.get()) + "," + str(self.EM_PRPI2Val.get()) +  \
-                "," + str(self.EM_HCPI0Val.get()) + "," + str(self.EM_HCPI1Val.get()) + "," + str(self.EM_HCPI2Val.get()) +  \
+        return("," + str(self.EM_PRP0Val.get()) + "," + str(self.EM_PRP1Val.get()) + "," + str(self.EM_PRP2Val.get()+ "," + str(self.EM_PRP4Val.get()) +  \
+                "," + str(self.EM_HCP0Val.get()) + "," + str(self.EM_HCP1Val.get()) + "," + str(self.EM_HCP2Val.get() + "," + str(self.EM_HCP4Val.get()) +  \
+                "," + str(self.EM_PRPI0Val.get()) + "," + str(self.EM_PRPI1Val.get()) + "," + str(self.EM_PRPI2Val.get() + "," + str(self.EM_PRPI4Val.get()) +  \
+                "," + str(self.EM_HCPI0Val.get()) + "," + str(self.EM_HCPI1Val.get()) + "," + str(self.EM_HCPI2Val.get() + "," + str(self.EM_HCPI4Val.get()) +  \
                 "," + str(self.EM_VoltsVal.get()) + "," + str(self.EM_TemperatureVal.get()) + \
                 "," + str(self.EM_PitchVal.get()) + "," + str(self.EM_RollVal.get()))
 
@@ -743,7 +747,7 @@ class EMApp(ttk.Frame):
     def doitPlot(self):
         if not os.path.exists(self.savePlotFile.get()):
             with open(self.savePlotFile.get(), 'w') as the_file:
-               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Plot,Longitude 1,Latitude 1,Height 1,EM_PRP0,EM_PRP1,EM_PRP2,EM_HCP0,EM_HCP1,EM_HCP2,EM_PRPI0,EM_PRPI1,EM_PRPI2,EM_HCPI0,EM_HCPI1,EM_HCPI2,EM_Volts,EM_Temperature,EM_Pitch,EM_Roll,Operator=' + str(self.operator.get()) + '\n')
+               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Plot,Longitude 1,Latitude 1,Height 1,EM_PRP0,EM_PRP1,EM_PRP2,EM_PRP4,EM_HCP0,EM_HCP1,EM_HCP2,EM_HCP4,EM_PRPI0,EM_PRPI1,EM_PRPI2,EM_PRPI4,EM_HCPI0,EM_HCPI1,EM_HCPI2,EM_HCPI4,EM_Volts,EM_Temperature,EM_Pitch,EM_Roll,Operator=' + str(self.operator.get()) + '\n')
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
         line = time_now + "," + self.SeqVal.get() + "," +\
             str(self.X1Val.get()) + "," + str(self.Y1Val.get()) + "," + str(self.H1Val.get()) + \
