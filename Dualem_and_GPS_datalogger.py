@@ -279,7 +279,7 @@ class EMApp(ttk.Frame):
         self.chartBtnTrack = ttk.Button(self.chartButtonFrame, text="Track", command = self.onTrackBtnPressed)
         self.chartBtnHist = ttk.Button(self.chartButtonFrame, text="Histogram", command = self.onHistBtnPressed)
         self.chartCombo = ttk.Combobox(self.chartButtonFrame, width=6,
-                                       values=['PRP0', 'PRP1', 'PRP2', 'HCP0', 'HCP1', 'HCP2'])
+                                       values=['PRP0', 'PRP1', 'PRP2', 'PRP4', 'HCP0', 'HCP1', 'HCP2', 'HCP4'])
         self.chartCombo.bind('<<ComboboxSelected>>', self.onSelectChartHist)
         self.chartCombo.set('PRP1')
         self.chartBtnTrack.grid(row=0, column = 0, padx=5, pady=5)
@@ -1022,6 +1022,13 @@ class EMApp(ttk.Frame):
                 self.EM_PRP2Val.set(splitlines[4])      #PRP conductivity in mS/m
                 self.EM_PRPI2Val.set(splitlines[5].split('*')[0])      #PRP inphase in ppt
             return 1
+        elif len(splitlines) >= 6 and "PDLM4" in splitlines[0]:
+            with lock:
+                self.EM_HCP4Val.set(splitlines[2])      #HCP conductivity in mS/m
+                self.EM_HCPI4Val.set(splitlines[3])     #HCP inphase in ppt
+                self.EM_PRP4Val.set(splitlines[4])      #PRP conductivity in mS/m
+                self.EM_PRPI4Val.set(splitlines[5].split('*')[0])      #PRP inphase in ppt
+            return 1
         elif len(splitlines) >= 4 and "PDLMA" in splitlines[0]:
             with lock:
                 self.EM_VoltsVal.set(float(splitlines[1]))
@@ -1117,6 +1124,10 @@ class EMApp(ttk.Frame):
                 self.EM_HCPI2Val.set(0.0)
                 self.EM_PRP2Val.set(0.0)
                 self.EM_PRPI2Val.set(0.0)
+                self.EM_HCP4Val.set(0.0)
+                self.EM_HCPI4Val.set(0.0)
+                self.EM_PRP4Val.set(0.0)
+                self.EM_PRPI4Val.set(0.0)
                 self.EM_RollVal.set(0)
                 s = None
                 try:
