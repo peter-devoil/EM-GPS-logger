@@ -36,9 +36,9 @@ if not os.path.exists('Dualem_companion.ini'):
     config['Operator'] = {'Name' : getpass.getuser()}
     config['Output'] = {'Frequency' : 2, 'Directory' : '/media/qaafi/usb'}
     #config['Output'] = {'Frequency' : 2, 'Directory' : os.getcwd()}
-    config['Dummy'] = {'active': True, 'dummyFile': 'Dualem21S_chickpea_14092023.csv'}
-#    with open('Dualem_companion.ini', 'w') as configfile:
-#        config.write(configfile)
+    config['Dummy'] = {'active': False, 'dummyFile': 'Dualem21S_chickpea_14092023.csv'}
+    with open('Dualem_companion.ini', 'w') as configfile:
+        config.write(configfile)
 
 else:
     config.read('Dualem_companion.ini')
@@ -228,6 +228,10 @@ class EMApp():
         self.EM_HCPI2Val = 0.0
         self.EM_PRP2Val = 0.0
         self.EM_PRPI2Val = 0.0
+        self.EM_HCP4Val = 0.0
+        self.EM_HCPI4Val = 0.0
+        self.EM_PRP4Val = 0.0
+        self.EM_PRPI4Val = 0.0
         self.EM_RollVal = 0
         self.EM_VoltsVal = 0
         self.EM_TemperatureVal = 0
@@ -309,7 +313,7 @@ class EMApp():
     def startLogging(self):
         if not os.path.exists(self.saveFile):
             with open(self.saveFile, 'w') as the_file:
-               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM HCP0,EM HCP1,EM HCP2,EM PRPI0,EM PRPI1,EM PRPI2,EM HCPI0,EM HCPI1,EM HCPI2,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator) + '\n')
+               the_file.write('YYYY-MM-DD,HH:MM:SS.F,Longitude,Latitude,Elevation,Speed,Track,Quality,EM PRP0,EM PRP1,EM PRP2,EM PRP4,EM HCP0,EM HCP1,EM HCP2,EM HCP4,EM PRPI0,EM PRPI1,EM PRPI2,EM PRPI4,EM HCPI0,EM HCPI1,EM HCPI2,EM HCPI4,EM Volts,EM Temperature,EM Pitch,EM Roll,Operator=' + str(self.operator) + '\n')
         if (str_to_bool(config['Dummy']['active'])):
             self.setupDummy()
             self.doLoggingDummy()
@@ -477,10 +481,10 @@ class EMApp():
 
     def getE1(self):
         with lock:
-              return("," + str(self.EM_PRP0Val) + "," + str(self.EM_PRP1Val) + "," + str(self.EM_PRP2Val) +  \
-                       "," + str(self.EM_HCP0Val) + "," + str(self.EM_HCP1Val) + "," + str(self.EM_HCP2Val) +  \
-                     "," + str(self.EM_PRPI0Val) + "," + str(self.EM_PRPI1Val) + "," + str(self.EM_PRPI2Val) +  \
-                     "," + str(self.EM_HCPI0Val) + "," + str(self.EM_HCPI1Val) + "," + str(self.EM_HCPI2Val) +  \
+              return("," + str(self.EM_PRP0Val) + "," + str(self.EM_PRP1Val) + "," + str(self.EM_PRP2Val) + "," + str(self.EM_PRP4Val) \
+                       "," + str(self.EM_HCP0Val) + "," + str(self.EM_HCP1Val) + "," + str(self.EM_HCP2Val) + "," + str(self.EM_HCP4Val) \
+                     "," + str(self.EM_PRPI0Val) + "," + str(self.EM_PRPI1Val) + "," + str(self.EM_PRPI2Val) + "," + str(self.EM_PRPI4Val) \
+                     "," + str(self.EM_HCPI0Val) + "," + str(self.EM_HCPI1Val) + "," + str(self.EM_HCPI2Val) + "," + str(self.EM_HCPI4Val) \
                      "," + str(self.EM_VoltsVal) + "," + str(self.EM_TemperatureVal) + \
                      "," + str(self.EM_PitchVal) + "," + str(self.EM_RollVal))
 
@@ -509,10 +513,10 @@ class EMApp():
             self.writeOutput == "on", 
             self.dummyData['Longitude 2'][self.dummyCtr], self.dummyData['Latitude 2'][self.dummyCtr],self.dummyData['Elevation 2'][self.dummyCtr],
             self.dummyData['Speed 2'][self.dummyCtr], self.dummyData['Track 2'][self.dummyCtr], 'Unknown',
-            self.dummyData['EM PRPH'][self.dummyCtr],self.dummyData['EM PRP1'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], 
-            self.dummyData['EM HCPH'][self.dummyCtr],self.dummyData['EM HCP1'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr],
-            self.dummyData['EM PRPIH'][self.dummyCtr],self.dummyData['EM PRPI1'][self.dummyCtr], self.dummyData['EM PRPI2'][self.dummyCtr], 
-            self.dummyData['EM HPCIH'][self.dummyCtr],self.dummyData['EM HCPI1'][self.dummyCtr], self.dummyData['EM HCPI2'][self.dummyCtr],
+            self.dummyData['EM PRPH'][self.dummyCtr],self.dummyData['EM PRP1'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], 
+            self.dummyData['EM HCPH'][self.dummyCtr],self.dummyData['EM HCP1'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr],
+            self.dummyData['EM PRPIH'][self.dummyCtr],self.dummyData['EM PRPI1'][self.dummyCtr], self.dummyData['EM PRPI2'][self.dummyCtr], self.dummyData['EM PRPI2'][self.dummyCtr], 
+            self.dummyData['EM HPCIH'][self.dummyCtr],self.dummyData['EM HCPI1'][self.dummyCtr], self.dummyData['EM HCPI2'][self.dummyCtr],self.dummyData['EM HCPI2'][self.dummyCtr],
             self.dummyData['EM Volts'][self.dummyCtr],self.dummyData['EM Temperature'][self.dummyCtr],self.dummyData['EM Pitch'][self.dummyCtr], self.dummyData['EM Roll'][self.dummyCtr])
         self.dummyCtr = self.dummyCtr + 1
 
@@ -547,18 +551,18 @@ class EMApp():
         self.recordPoint(time_now, self.writeOutput == "on", 
                          self.X1Val, self.Y1Val, self.H1Val,
                          self.SpeedVal, self.TrackVal, self.GPSQuality,
-                         self.EM_PRP0Val,self.EM_PRP1Val, self.EM_PRP2Val, 
-                         self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val,
-                         self.EM_PRPI0Val,self.EM_PRPI1Val, self.EM_PRPI2Val, 
-                         self.EM_HCPI0Val,self.EM_HCPI1Val, self.EM_HCPI2Val,
+                         self.EM_PRP0Val,self.EM_PRP1Val, self.EM_PRP2Val, self.EM_PRP4Val, 
+                         self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val, self.EM_HCP4Val,
+                         self.EM_PRPI0Val,self.EM_PRPI1Val, self.EM_PRPI2Val, self.EM_PRPI4Val,
+                         self.EM_HCPI0Val,self.EM_HCPI1Val, self.EM_HCPI2Val, self.EM_HCPI4Val,
                          self.EM_VoltsVal, self.EM_TemperatureVal, self.EM_PitchVal, self.EM_RollVal)
         
 
     def recordPoint(self, time, recorded, X, Y, Z, Speed, Track, Quality, 
-                    EM_PRP0, EM_PRP1, EM_PRP2, 
-                    EM_HCP0, EM_HCP1, EM_HCP2,
-                    EM_PRPI0, EM_PRPI1, EM_PRPI2, 
-                    EM_HCPI0, EM_HCPI1, EM_HCPI2,
+                    EM_PRP0, EM_PRP1, EM_PRP2, EM_PRP4, 
+                    EM_HCP0, EM_HCP1, EM_HCP2, EM_HCP4,
+                    EM_PRPI0, EM_PRPI1, EM_PRPI2, EM_PRPI4,
+                    EM_HCPI0, EM_HCPI1, EM_HCPI2, EM_HCPI4,
                     EM_Volts, EM_Temperature, EM_Pitch, EM_Roll):
         self.record.append({'id': len(self.record),
                          'timestamp': time,
@@ -572,15 +576,19 @@ class EMApp():
                          'EM_PRP0': EM_PRP0,
                          'EM_PRP1': EM_PRP1, 
                          'EM_PRP2': EM_PRP2, 
+                         'EM_PRP2': EM_PRP4, 
                          'EM_HCP0': EM_HCP0,
                          'EM_HCP1': EM_HCP1, 
                          'EM_HCP2': EM_HCP2,
+                         'EM_HCP4': EM_HCP4,
                          'EM_PRPI0': EM_PRPI0,
                          'EM_PRPI1': EM_PRPI1, 
                          'EM_PRPI2': EM_PRPI2, 
+                         'EM_PRPI4': EM_PRPI4, 
                          'EM_HCPI0': EM_HCPI0,
                          'EM_HCPI1': EM_HCPI1, 
                          'EM_HCPI2': EM_HCPI2,
+                         'EM_HCPI4': EM_HCPI4,
                          'EM_Volts': EM_Volts, 
                          'EM_Temperature': EM_Temperature, 
                          'EM_Pitch': EM_Pitch,
@@ -652,29 +660,46 @@ class EMApp():
         splitlines = linedata.split(',')
         #print(splitlines)
         if useGPS and len(splitlines) >= 10 and ("GPGGA" in splitlines[0] or "GNGGA" in splitlines[0]):
-            S = decimal_degrees(*dm(float(splitlines[2])))
-            if splitlines[3].find('S') >= 0:
-                S = S * -1
-            E = decimal_degrees(*dm(float(splitlines[4])))
-            H = float(splitlines[9])
-            Q = int(splitlines[6])
-            with lock:
-                self.X1Val = E
-                self.Y1Val = S
-                self.H1Val = H
-                self.GPSQuality = Q
-            return 1
-        elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
-            T = 0.0
-            if splitlines[1] != "":
-                T = float(splitlines[1])
-                S = 0.0
-            if splitlines[7] != "":
-                S = float(splitlines[7])
+            ok = False
+            try:
+                S = decimal_degrees(*dm(float(splitlines[2])))
+                if splitlines[3].find('S') >= 0:
+                    S = S * -1
+                E = decimal_degrees(*dm(float(splitlines[4])))
+                H = float(splitlines[9])
+                Q = int(splitlines[6])
+                ok = True
+            except:
+                print( "failed parsing GGA string: " +  linedata + "\n")
+
+            if ok:
                 with lock:
-                    self.TrackVal = T
-                    self.SpeedVal = S
-            return 1
+                    self.X1Val.set(E)
+                    self.Y1Val.set(S)
+                    self.H1Val.set(H)
+                    self.GPSQualityVal.set(Q)
+                return 1
+            return 0
+        elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
+            ok = False
+            Track = 0.0
+            Speed = 0.0
+            try:
+                if splitlines[1] != "":
+                    Track = float(splitlines[1])
+                    ok = True
+                if splitlines[7] != "":
+                    Speed = float(splitlines[7])
+                    ok = True
+            except:
+                print( "failed parsing VTG string: " +  linedata + "\n")
+
+            if ok:
+                with lock:
+                    self.TrackVal.set(Track)
+                    self.SpeedVal.set(Speed)
+                return 1
+            return 0
         elif len(splitlines) >= 6 and ("PDLM0" in splitlines[0] or "PDLMH" in splitlines[0]):
             with lock:
                 self.EM_HCP0Val = splitlines[2]   #HCP conductivity in mS/m
@@ -695,6 +720,13 @@ class EMApp():
                 self.EM_HCPI2Val = splitlines[3]     #HCP inphase in ppt
                 self.EM_PRP2Val = splitlines[4]      #PRP conductivity in mS/m
                 self.EM_PRPI2Val = splitlines[5].split('*')[0]      #PRP inphase in ppt
+            return 1
+        elif len(splitlines) >= 6 and "PDLM4" in splitlines[0]:
+            with lock:
+                self.EM_HCP4Val = splitlines[2]      #HCP conductivity in mS/m
+                self.EM_HCPI4Val = splitlines[3]     #HCP inphase in ppt
+                self.EM_PRP4Val = splitlines[4]      #PRP conductivity in mS/m
+                self.EM_PRPI4Val = splitlines[5].split('*')[0]      #PRP inphase in ppt
             return 1
         elif len(splitlines) >= 4 and "PDLMA" in splitlines[0]:
             with lock:
@@ -788,6 +820,10 @@ class EMApp():
                 self.EM_HCPI2Val = 0.0
                 self.EM_PRP2Val = 0.0
                 self.EM_PRPI2Val = 0.0
+                self.EM_HCP4Val = 0.0
+                self.EM_HCPI4Val = 0.0
+                self.EM_PRP4Val = 0.0
+                self.EM_PRPI4Val = 0.0
                 self.EM_RollVal = 0
                 self.EM_VoltsVal = 0
                 self.EM_TemperatureVal = 0
