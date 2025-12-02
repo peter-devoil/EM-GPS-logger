@@ -721,10 +721,10 @@ class EMApp(ttk.Frame):
         sys.exit(0)
 
     def getE1(self):
-        return("," + str(self.EM_PRP0Val.get()) + "," + str(self.EM_PRP1Val.get()) + "," + str(self.EM_PRP2Val.get()+ "," + str(self.EM_PRP4Val.get()) +  \
-                "," + str(self.EM_HCP0Val.get()) + "," + str(self.EM_HCP1Val.get()) + "," + str(self.EM_HCP2Val.get() + "," + str(self.EM_HCP4Val.get()) +  \
-                "," + str(self.EM_PRPI0Val.get()) + "," + str(self.EM_PRPI1Val.get()) + "," + str(self.EM_PRPI2Val.get() + "," + str(self.EM_PRPI4Val.get()) +  \
-                "," + str(self.EM_HCPI0Val.get()) + "," + str(self.EM_HCPI1Val.get()) + "," + str(self.EM_HCPI2Val.get() + "," + str(self.EM_HCPI4Val.get()) +  \
+        return("," + str(self.EM_PRP0Val.get()) + "," + str(self.EM_PRP1Val.get()) + "," + str(self.EM_PRP2Val.get())+ "," + str(self.EM_PRP4Val.get()) +  \
+                "," + str(self.EM_HCP0Val.get()) + "," + str(self.EM_HCP1Val.get()) + "," + str(self.EM_HCP2Val.get()) + "," + str(self.EM_HCP4Val.get()) +  \
+                "," + str(self.EM_PRPI0Val.get()) + "," + str(self.EM_PRPI1Val.get()) + "," + str(self.EM_PRPI2Val.get()) + "," + str(self.EM_PRPI4Val.get()) +  \
+                "," + str(self.EM_HCPI0Val.get()) + "," + str(self.EM_HCPI1Val.get()) + "," + str(self.EM_HCPI2Val.get()) + "," + str(self.EM_HCPI4Val.get()) +  \
                 "," + str(self.EM_VoltsVal.get()) + "," + str(self.EM_TemperatureVal.get()) + \
                 "," + str(self.EM_PitchVal.get()) + "," + str(self.EM_RollVal.get()))
 
@@ -977,30 +977,46 @@ class EMApp(ttk.Frame):
         splitlines = linedata.split(',')
         #print(splitlines)
         if useGPS and len(splitlines) >= 10 and ("GPGGA" in splitlines[0] or "GNGGA" in splitlines[0]):
-            S = decimal_degrees(*dm(float(splitlines[2])))
-            if splitlines[3].find('S') >= 0:
-                S = S * -1
-            E = decimal_degrees(*dm(float(splitlines[4])))
-            H = float(splitlines[9])
-            Q = int(splitlines[6])
-            with lock:
-                self.X1Val.set(E)
-                self.Y1Val.set(S)
-                self.H1Val.set(H)
-                self.GPSQualityVal.set(Q)
-            return 1
-        elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
-            T = 0.0
-            if splitlines[1] != "":
-                T = float(splitlines[1])
-                S = 0.0
-            if splitlines[7] != "":
-                S = float(splitlines[7])
+            ok = False
+            try:
+                S = decimal_degrees(*dm(float(splitlines[2])))
+                if splitlines[3].find('S') >= 0:
+                    S = S * -1
+                E = decimal_degrees(*dm(float(splitlines[4])))
+                H = float(splitlines[9])
+                Q = int(splitlines[6])
+                ok = True
+            except:
+                print( "failed parsing GGA string: " +  linedata + "\n")
+
+            if ok:
                 with lock:
-                    self.TrackVal.set(T)
-                    self.SpeedVal.set(S)
-                    #print("Track= " + str(T))
-            return 1
+                    self.X1Val.set(E)
+                    self.Y1Val.set(S)
+                    self.H1Val.set(H)
+                    self.GPSQualityVal.set(Q)
+                return 1
+            return 0
+        elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
+            ok = False
+            Track = 0.0
+            Speed = 0.0
+            try:
+                if splitlines[1] != "":
+                    Track = float(splitlines[1])
+                    ok = True
+                if splitlines[7] != "":
+                    Speed = float(splitlines[7])
+                    ok = True
+            except:
+                print( "failed parsing VTG string: " +  linedata + "\n")
+
+            if ok:
+                with lock:
+                    self.TrackVal.set(Track)
+                    self.SpeedVal.set(Speed)
+                return 1
+            return 0
         elif len(splitlines) >= 6 and ("PDLM0" in splitlines[0] or "PDLMH" in splitlines[0]):
             with lock:
                 self.EM_HCP0Val.set(splitlines[2])   #HCP conductivity in mS/m
