@@ -481,10 +481,10 @@ class EMApp():
 
     def getE1(self):
         with lock:
-              return("," + str(self.EM_PRP0Val) + "," + str(self.EM_PRP1Val) + "," + str(self.EM_PRP2Val) + "," + str(self.EM_PRP4Val) \
-                       "," + str(self.EM_HCP0Val) + "," + str(self.EM_HCP1Val) + "," + str(self.EM_HCP2Val) + "," + str(self.EM_HCP4Val) \
-                     "," + str(self.EM_PRPI0Val) + "," + str(self.EM_PRPI1Val) + "," + str(self.EM_PRPI2Val) + "," + str(self.EM_PRPI4Val) \
-                     "," + str(self.EM_HCPI0Val) + "," + str(self.EM_HCPI1Val) + "," + str(self.EM_HCPI2Val) + "," + str(self.EM_HCPI4Val) \
+              return("," + str(self.EM_PRP0Val) + "," + str(self.EM_PRP1Val) + "," + str(self.EM_PRP2Val) + "," + str(self.EM_PRP4Val) +\
+                       "," + str(self.EM_HCP0Val) + "," + str(self.EM_HCP1Val) + "," + str(self.EM_HCP2Val) + "," + str(self.EM_HCP4Val) +\
+                     "," + str(self.EM_PRPI0Val) + "," + str(self.EM_PRPI1Val) + "," + str(self.EM_PRPI2Val) + "," + str(self.EM_PRPI4Val) +\
+                     "," + str(self.EM_HCPI0Val) + "," + str(self.EM_HCPI1Val) + "," + str(self.EM_HCPI2Val) + "," + str(self.EM_HCPI4Val) +\
                      "," + str(self.EM_VoltsVal) + "," + str(self.EM_TemperatureVal) + \
                      "," + str(self.EM_PitchVal) + "," + str(self.EM_RollVal))
 
