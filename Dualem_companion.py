@@ -27,8 +27,8 @@ import serial
 
 config = configparser.ConfigParser()
 if not os.path.exists('Dualem_companion.ini'):
-    #config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400}
-    config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyUSB0', 'Baud' : 38400}
+    #config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400, 'NeedsTickle' : False}
+    config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyUSB0', 'Baud' : 38400, 'NeedsTickle' : False}
     config['GPS'] = {'Mode': 'Undefined', 'Address' : '/dev/ttyUSB1', 'Baud' : 38400}
     config['Drone'] = {'system_address': 'udp://:14540'}
     #config['Drone'] = {'system_address': 'serial:///dev/ttyAGM0:58600'}
@@ -576,7 +576,7 @@ class EMApp():
                          'EM_PRP0': EM_PRP0,
                          'EM_PRP1': EM_PRP1, 
                          'EM_PRP2': EM_PRP2, 
-                         'EM_PRP2': EM_PRP4, 
+                         'EM_PRP4': EM_PRP4, 
                          'EM_HCP0': EM_HCP0,
                          'EM_HCP1': EM_HCP1, 
                          'EM_HCP2': EM_HCP2,
@@ -859,6 +859,12 @@ class EMApp():
                         
                         if self.nmea_decode(linedata, useGPS=False): 
                             self.lastEMTime = datetime.datetime.now()
+
+                        if (bool(config['EM']['NeedsTickle']) and hasattr(s, "write")):
+                            try: 
+                                s.write(b'%\r\n') # Sometimes this is needed, sometimes not...
+                            except:
+                                pass
 
                         ROLL = self.EM_RollVal
                         if float(abs(ROLL)) > 20:

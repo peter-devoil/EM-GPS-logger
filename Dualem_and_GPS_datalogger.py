@@ -24,8 +24,8 @@ config = configparser.ConfigParser()
 if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
     config['GPS1'] = {'Mode': 'IP', 'Address': '10.0.0.1:5017', 'Baud' : 4800}
     #config['GPS1'] = {'Mode': 'Bluetooth', 'Address' : 'Facet Rover-9A22', 'Baud' : 4800}
-    config['EM'] = {'Mode': 'Serial', 'Address' : 'COM4', 'Baud' : 38400}
-    #config['EM'] = {'Mode': 'Undefined', 'Port': 'Undefined', 'Baud': 38400} # COM4
+    config['EM'] = {'Mode': 'Serial', 'Address' : 'COM4', 'Baud' : 38400, 'NeedsTickle' : False}
+    #config['EM'] = {'Mode': 'Undefined', 'Port': 'Undefined', 'Baud': 38400, 'NeedsTickle' : False}
     config['Operator'] = {'Name' : getpass.getuser()}
     config['IP'] = {'Recent' : "10.0.0.1:5017" }
     config['Serial'] = {'Recent' : "COM1,COM4" }
@@ -40,6 +40,9 @@ else:
 
     if not config.has_option('EM', 'Baud'):
         config['EM']['Baud'] = "38400"
+
+    if not config.has_option('EM', 'NeedsTickle'):
+        config['EM']['NeedsTickle'] = "False"
 
     if not config.has_section('Output'):
         config.add_section('Output')
@@ -215,6 +218,11 @@ class EMApp(ttk.Frame):
         self.EM_TemperatureVal= tk.DoubleVar()
         self.EMTemperature = ttk.Label(frame3b, textvariable=self.EM_TemperatureVal) 
         self.EMTemperature.grid(row=0, column = 1, padx=5, pady=6)
+
+        self.EM_NeedsTickleVal= tk.BooleanVar()
+        self.EM_NeedsTickleVal.set(config['EM']['NeedsTickle'])
+        self.EM_NeedsTickleBtn = ttk.Checkbutton(frame3b, text="Sleepy", variable=self.EM_NeedsTickleVal) 
+        self.EM_NeedsTickleBtn.grid(row=0, column = 2, padx=5, pady=6, sticky="e")
 
         self.PRP0Lab = ttk.Label(self.frame3, text="PRP0") 
         self.PRP0Lab.grid(row=2, column = 0, pady=5)
@@ -996,7 +1004,6 @@ class EMApp(ttk.Frame):
                     self.H1Val.set(H)
                     self.GPSQualityVal.set(Q)
                 return 1
-            return 0
         elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
             ok = False
             Track = 0.0
@@ -1016,7 +1023,6 @@ class EMApp(ttk.Frame):
                     self.TrackVal.set(Track)
                     self.SpeedVal.set(Speed)
                 return 1
-            return 0
         elif len(splitlines) >= 6 and ("PDLM0" in splitlines[0] or "PDLMH" in splitlines[0]):
             with lock:
                 self.EM_HCP0Val.set(splitlines[2])   #HCP conductivity in mS/m
@@ -1078,8 +1084,7 @@ class EMApp(ttk.Frame):
                                 if (s.in_waiting <= 0):
                                     time.sleep(0.01)
                                 else:
-                                    byt = s.read(s.in_waiting)
-                                    line += str(byt, encoding) # serial "socket"
+                                    line += str(s.read(s.in_waiting), encoding) # serial "socket"
                             else:
                                 try:
                                     line += str(s.recv(1), encoding)  # BT, IP socket - has timeout set
@@ -1108,6 +1113,7 @@ class EMApp(ttk.Frame):
 
                         if self.nmea_decode(linedata):
                             self.lastGPS1Time = datetime.datetime.now()
+
 
                 except Exception as e:
                     self.showMessage("gps: " + str(e))
@@ -1150,7 +1156,7 @@ class EMApp(ttk.Frame):
                     s = self.openComms(cfg)
                     line = ''
                     while (not self.stopFlag.is_set()) and not self.restartEMFlag.is_set():
-                        while (line.find('\n') < 0) and not self.restartEMFlag.is_set():
+                        while line.find('\n') < 0 and not self.restartEMFlag.is_set():
                             if (cfg['Mode'] == "Serial"):
                                 if (s.in_waiting > 0):
                                     line = line + s.read(s.in_waiting).decode('ascii') 
@@ -1173,8 +1179,14 @@ class EMApp(ttk.Frame):
                         linedata = line[:line.find('\n')]
                         line = line[line.find('\n')+1:]
 
-                        if self.nmea_decode(linedata, useGPS=False): # fixme: Only use dualEM gps signal if there's no alternative
+                        if self.nmea_decode(linedata, useGPS=False): 
                             self.lastEMTime = datetime.datetime.now()
+
+                        if (config['EM']['NeedsTickle'] and hasattr(s, "write")):
+                            try: 
+                                s.write(b'%\r\n') # Sometimes this is needed, sometimes not...
+                            except:
+                                pass
 
                         ROLL = self.EM_RollVal.get()
                         if float(abs(ROLL)) > 20:
