@@ -15,20 +15,20 @@
 
        // get the data
        function initData(element) {
-              element.replaceChildren();
-
               width =  element.clientWidth; // 500 - margin.left - margin.right;
               height = element.clientHeight; //500 - margin.top - margin.bottom;
 
               if (width <= 0 || height <= 0) { console.log("zero WH"); return; }
 
+              element.replaceChildren();
               svg = d3.select(element)
                      .append('svg')
-                     .classed("svg-content-responsive", true)
+                     .classed("svg-content", true)
                      .attr("preserveAspectRatio", "xMidYMid meet")
                      .attr("viewBox", [0, 0, width, height]);
                      //.attr("viewBox", margin.top + " " + margin.left + " " + width + " " + height)
                      //.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+              
        }
 
        function checkExtents(theData, from) {
@@ -102,11 +102,10 @@
                      .call(d3.axisBottom(tScale).ticks(6));
 
               var activeChannels = theData.channels
-                     .filter(c => c.active /*&& !isEqCT(theData.lowerBounds[c.dataName], theData.upperBounds[c.dataName])*/);
-                     //.map(c => c.displayName);
+                     .filter(c => c.active );
 
               // Create the channel axes 
-              var channelHeight = Math.max(0, (height - margin.top - margin.bottom ) / activeChannels.length); // width of each channel
+              var channelHeight = Math.max(0, (height - margin.top - margin.bottom ) / activeChannels.length);
               if (emAxes.length == 0 || emBoundsChanged) {
                      // Y axis: minor axis for each channel
                      emAxes["major"] = d3.scaleBand()
@@ -157,8 +156,7 @@
                             .attr("id", "emlow" + c.displayName)
                             .attr("y", height - margin.bottom - emAxes["major"](c.displayName) )
                             .attr("x", width - margin.right)
-                            .attr("dy", -15)
-                            //.attr("dx", 10)
+                            .attr("dy", -2)
                             .attr("text-anchor", "end")
                             .text(theData.lowerBounds[c.dataName])
                             .style("font", "10px roboto");
@@ -167,8 +165,7 @@
                             .attr("id", "emhigh" + c.displayName)
                             .attr("y", height - margin.bottom - emAxes["major"](c.displayName) - channelHeight)
                             .attr("x", width - margin.right)
-                            .attr("dy", 15)
-                            //.attr("dx", 10)
+                            .attr("dy", 12)
                             .attr("text-anchor", "end")
                             .text(theData.upperBounds[c.dataName])
                             .style("font", "10px roboto");

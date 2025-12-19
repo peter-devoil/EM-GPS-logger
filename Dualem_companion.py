@@ -20,6 +20,7 @@ import unicodedata
 import string
 import csv
 import serial
+import subprocess
 
 #from tendo import singleton
 # 
@@ -84,6 +85,19 @@ def MakeHandlerClassWithBakedInApp(app):
                         since = 0
                 if (since >= 0):
                     self.getData( since )
+
+            if self.path.startswith("/getLogs"):
+                log = subprocess.run("/usr/bin/journalctl -u NetworkManager -o short -S today", shell = True, capture_output=True)
+                obj = {'args' : log.args,
+                       'exitcode' : log.returncode,
+                       'stdout' : log.stdout.decode(),
+                       'stderr' : log.stderr.decode()}
+                bData = bytes(json.dumps( obj, ensure_ascii=False), 'utf-8')
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write( bData )
+
             elif self.path.startswith("/setStatus"):
                 newStatus = ""
                 try:
@@ -246,6 +260,7 @@ class EMApp():
         self.lastErrorTime = datetime.datetime.now() - datetime.timedelta(seconds=30)
 
         self.errMsgSource = []
+        self.OutputFrequency = float(config['Output']['Frequency'])
 
         self.workers = []
         if not str_to_bool(config['Dummy']['active']):
@@ -305,7 +320,8 @@ class EMApp():
     def StatusInfo(self):
         result = {}
         result['status'] = "Running" if self.writeOutput == "on" else "Idle"
-        result['EM'] = "Error" if self.hasEMError else "Ok"
+        result['EM'] = "Error" if self.hasEMError() else "Ok"
+        result['GPS'] = "Error" if self.hasGPSError() else "Ok"
         result['Drone'] = self.droneState
         
         return(result)
@@ -519,6 +535,8 @@ class EMApp():
             self.dummyData['EM HPCIH'][self.dummyCtr],self.dummyData['EM HCPI1'][self.dummyCtr], self.dummyData['EM HCPI2'][self.dummyCtr],self.dummyData['EM HCPI2'][self.dummyCtr],
             self.dummyData['EM Volts'][self.dummyCtr],self.dummyData['EM Temperature'][self.dummyCtr],self.dummyData['EM Pitch'][self.dummyCtr], self.dummyData['EM Roll'][self.dummyCtr])
         self.dummyCtr = self.dummyCtr + 1
+        self.lastGPSTime = datetime.datetime.now()
+        self.lastEMTime = datetime.datetime.now()
 
 
     def setupDummy(self):
@@ -860,7 +878,7 @@ class EMApp():
                         if self.nmea_decode(linedata, useGPS=False): 
                             self.lastEMTime = datetime.datetime.now()
 
-                        if (bool(config['EM']['NeedsTickle']) and hasattr(s, "write")):
+                        if (config['EM']['NeedsTickle'] and hasattr(s, "write")):
                             try: 
                                 s.write(b'%\r\n') # Sometimes this is needed, sometimes not...
                             except:

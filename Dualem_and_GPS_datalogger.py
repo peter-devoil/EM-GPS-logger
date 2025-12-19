@@ -42,7 +42,7 @@ else:
         config['EM']['Baud'] = "38400"
 
     if not config.has_option('EM', 'NeedsTickle'):
-        config['EM']['NeedsTickle'] = "False"
+        config['EM']['NeedsTickle'] = False
 
     if not config.has_section('Output'):
         config.add_section('Output')

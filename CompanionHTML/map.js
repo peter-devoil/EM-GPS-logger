@@ -9,18 +9,25 @@
        var version = "0.0.1";
        var lastId = -1;
        var bbox = [[0,0],[0,0]];
+       //var margin = { top: 0, right: 0, bottom: 0, left: 0 };
+       var margin = { top: 10, right: 10, bottom: 30, left: 40 };
 
        var svg = null;
 
        function initData(element) {
+             width = element.clientWidth;
+             height = element.clientHeight;
+             if (width <= 0 || height <= 0) { console.log("zero WH"); return; }
+
              element.replaceChildren();
-             width = 400;//element.offsetWidth;
-             height = 400;//element.offsetHeight;
+
              svg = d3.select(element)
                .append('svg')
+               .classed("svg-content", true)
                .attr("preserveAspectRatio", "xMidYMid meet") 
-               .attr("viewBox", [0, 0, width, height]);
-               //.classed("svg-content-responsive", true);
+               .attr("viewBox", [0, 0, width, height])
+               //.attr("viewBox", margin.top + " " + margin.left + " " + width + " " + height)
+               .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
        }
 
        function bbox_EQ(a, b) {
@@ -80,7 +87,7 @@
                      newFeatures = theData.features.slice(n);
                }
 
-               var x = svg.append("g")
+               svg.append("g")
                       .selectAll("emPath")
                       .data(newFeatures.features)
                       .enter()
@@ -89,12 +96,19 @@
                             return "translate(" + path.centroid(d.geometry) + ")"; 
                        })
                       .attr("r", 2)
-                      // fixme - somehow paint the last few red
-              //if (needsFlush) {
-              //       x.style("fill", "#red");
-              //} else {
                       .style("fill", "#69b3a2");
-              //}
+
+             var currFeatures = [ theData.features.features[theData.features.features.length - 1] ];
+             svg.append("g")
+                      .selectAll("currEMPath")
+                      .data(currFeatures)
+                      .enter()
+                      .append("circle")
+                      .attr("transform", function (d) { 
+                            return "translate(" + path.centroid(d.geometry) + ")"; 
+                       })
+                      .attr("r", 4)
+                      .style("fill", "#ff0000");
         }
        
        exports.version = version;
