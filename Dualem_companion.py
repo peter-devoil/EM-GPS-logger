@@ -31,8 +31,8 @@ if not os.path.exists('Dualem_companion.ini'):
     #config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyS0', 'Baud' : 38400, 'NeedsTickle' : False}
     config['EM'] = {'Mode': 'Serial', 'Address' : '/dev/ttyUSB0', 'Baud' : 38400, 'NeedsTickle' : False}
     config['GPS'] = {'Mode': 'Undefined', 'Address' : '/dev/ttyUSB1', 'Baud' : 38400}
-    config['Drone'] = {'system_address': 'udp://:14540'}
-    #config['Drone'] = {'system_address': 'serial:///dev/ttyAGM0:58600'}
+    #config['Drone'] = {'system_address': 'udp://:14540'}
+    config['Drone'] = {'system_address': 'serial:///dev/ttyACM0:57600'}
 
     config['Operator'] = {'Name' : getpass.getuser()}
     config['Output'] = {'Frequency' : 2, 'Directory' : '/media/qaafi/usb'}
@@ -86,8 +86,8 @@ def MakeHandlerClassWithBakedInApp(app):
                 if (since >= 0):
                     self.getData( since )
 
-            if self.path.startswith("/getLogs"):
-                log = subprocess.run("/usr/bin/journalctl -u NetworkManager -o short -S today", shell = True, capture_output=True)
+            elif self.path.startswith("/getLogs"):
+                log = subprocess.run("/usr/bin/journalctl -u Companion -o short -S today", shell = True, capture_output=True)
                 obj = {'args' : log.args,
                        'exitcode' : log.returncode,
                        'stdout' : log.stdout.decode(),
@@ -129,7 +129,7 @@ def MakeHandlerClassWithBakedInApp(app):
                        self.wfile.write(f.read())
                     
                 else:
-                    print("Failed " + path + " as " + os.path.splitext(path)[1][1:])
+                    print("Failed \"" + self.path + "\" as " + os.path.splitext(path)[1][1:])
                     self.send_response(404)
 
         def getData(self, since):
@@ -154,33 +154,33 @@ def doShutDown():
     os._exit(1)
 
 # watch for a new mission appearing
-async def monitor_mission_changes(emApp, drone):
+async def monitor_mission_changes(self, drone):
     async for change in drone.mission_raw.mission_changed():
         if change:
-            await emApp.reloadMission(drone)
+            await self.reloadMission(drone)
         else:
             print("-- No new mission")
 
 # look out for "SPRAY" (216) events in the mission plan
-async def monitor_mission_progress(emApp, drone):
+async def monitor_mission_progress(self, drone):
    async for p in drone.mission_raw.mission_progress():
-       if (emApp != None and p.current < len(emApp.mission_items)):
+       if (self != None and p.current < len(self.mission_items)):
            print(f"Mission progress: "
                f"{p.current}/"
-               f"{p.total}" + ", cmd=" + str(emApp.mission_items[p.current].command))
-           if emApp.mission_items[p.current].command == 216:
-               if(emApp.mission_items[p.current].param1 > 0):
-                   emApp.Start()
+               f"{p.total}" + ", cmd=" + str(self.mission_items[p.current].command))
+           if self.mission_items[p.current].command == 216:
+               if(self.mission_items[p.current].param1 > 0):
+                   self.Start()
                else:
-                   emApp.Pause()
+                   self.Pause()
 
 # Store away GPS position
-async def monitor_gpsPos(emApp, drone):
+async def monitor_gpsPos(self, drone):
    async for p in drone.telemetry.position():
-       emApp.X1Val = p.longitude_deg
-       emApp.Y1Val = p.latitude_deg 
-       emApp.H1Val = p.absolute_altitude_m
-       emApp.lastGPSTime = datetime.datetime.now()
+       self.X1Val = p.longitude_deg
+       self.Y1Val = p.latitude_deg 
+       self.H1Val = p.absolute_altitude_m
+       self.lastGPSTime = datetime.datetime.now()
        #print(f"drone: {p}")
 
 
@@ -691,12 +691,13 @@ class EMApp():
                 print( "failed parsing GGA string: " +  linedata + "\n")
 
             if ok:
-                with lock:
-                    self.X1Val.set(E)
-                    self.Y1Val.set(S)
-                    self.H1Val.set(H)
-                    self.GPSQualityVal.set(Q)
-                return 1
+                if (not E == 0) and (not S == 0):
+                    with lock:
+                        self.X1Val.set(E)
+                        self.Y1Val.set(S)
+                        self.H1Val.set(H)
+                        self.GPSQualityVal.set(Q)
+                    return 1
             return 0
         elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
             ok = False
@@ -761,6 +762,9 @@ class EMApp():
             cfg = config[cfgName]
             if (cfg['Mode'] == "Undefined") | ("No devices" in cfg['Address']):
                self.lastGPSTime = datetime.datetime.now()
+            elif (cfg['Mode'] == "Drone"):
+                # nothing ..
+                time.sleep(1)  
             else:
                 self.restartGPSFlag.clear()
                 self.lastGPSTime = datetime.datetime.now()
