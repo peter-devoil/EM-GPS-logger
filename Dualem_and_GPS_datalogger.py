@@ -24,7 +24,7 @@ config = configparser.ConfigParser()
 if not os.path.exists('Dualem_and_GPS_datalogger.ini'):
     config['GPS1'] = {'Mode': 'IP', 'Address': '10.0.0.1:5017', 'Baud' : 4800}
     #config['GPS1'] = {'Mode': 'Bluetooth', 'Address' : 'Facet Rover-9A22', 'Baud' : 4800}
-    config['EM'] = {'Mode': 'Serial', 'Address' : 'COM4', 'Baud' : 38400, 'NeedsTickle' : False}
+    config['EM'] = {'Mode': 'Serial', 'Address' : 'COM4', 'Baud' : 38400, 'NeedsTickle' : False, 'useGPS': False}
     #config['EM'] = {'Mode': 'Undefined', 'Port': 'Undefined', 'Baud': 38400, 'NeedsTickle' : False}
     config['Operator'] = {'Name' : getpass.getuser()}
     config['IP'] = {'Recent' : "10.0.0.1:5017" }
@@ -43,6 +43,9 @@ else:
 
     if not config.has_option('EM', 'NeedsTickle'):
         config['EM']['NeedsTickle'] = False
+
+    if not config.has_option('EM', 'useGPS'):
+        config['EM']['useGPS'] = False
 
     if not config.has_section('Output'):
         config.add_section('Output')
@@ -94,8 +97,21 @@ class EMApp(ttk.Frame):
         self.numEMErrors = 0
         self.lastBellTime = datetime.datetime.now() #- datetime.timedelta(seconds=10)
     
-    def IPHostCallback (self, variable):
-        config['GPS1']["Address"] = variable.get()
+    # IP addresses are text entries, and needs a restart when changed (the dropdowns dont)
+    def IPHostCallback (self, section, variable):
+        hasChanged = False
+        if config[section]["Address"] != variable.get():
+            hasChanged = True
+
+        config[section]["Address"] = variable.get()
+
+        if hasChanged and section == 'EM':
+            self.restartEMFlag.set()
+        if hasChanged and section == 'GPS':
+            self.restartGPS1Flag.set()
+
+        self.saveConfig()
+
 
     # Build the UI
     def initUI(self):
@@ -151,9 +167,8 @@ class EMApp(ttk.Frame):
         self.GPSBaudCbx.bind('<<ComboboxSelected>>', self.onSelectBaudGPS)
 
         self.IPAddress = tk.StringVar()
-
         self.IPAddress.set(config['GPS1']['Address'])
-        self.IPAddress.trace_add("write", lambda name, index, mode, sv=self.IPAddress: self.IPHostCallback(self.IPAddress))
+        self.IPAddress.trace_add("write", lambda name, index, mode, sv=self.IPAddress: self.IPHostCallback('GPS1', self.IPAddress))
     
         self.GPSAddr = ttk.Entry(self.frame2b, textvariable=self.IPAddress, width=16) 
         self.GPSAddrLab = ttk.Label(self.frame2b, text="Address") 
@@ -192,9 +207,15 @@ class EMApp(ttk.Frame):
         self.frame3a = ttk.Frame(self.frame3)
         self.frame3a.grid(row=0, column = 0, columnspan=10, sticky=tk.W+tk.E)
         self.EMModeLab = ttk.Label(self.frame3a, text="Mode") 
-        self.EMModeCbBx = ttk.Combobox(self.frame3a, values=["Undefined", "Bluetooth", "Serial"], width=15)
+        self.EMModeCbBx = ttk.Combobox(self.frame3a, values=["Undefined", "Bluetooth", "Serial", "IP"], width=15)
         self.EMModeCbBx.set(config['EM']['Mode'])
         self.EMModeCbBx.bind('<<ComboboxSelected>>', self.onSelectModeEM)
+
+        self.EM_IPAddress = tk.StringVar()
+        self.EM_IPAddress.set(config['EM']['Address'])
+        self.EM_IPAddress.trace_add("write", lambda name, index, mode, sv=self.IPAddress: self.IPHostCallback('EM', self.EM_IPAddress))
+        self.EMAddrLab =ttk.Label(self.frame3a, text="Address") 
+        self.EMAddr = ttk.Entry(self.frame3a, textvariable=self.EM_IPAddress, width=16)
 
         self.EMBaudLab = ttk.Label(self.frame3a, text="Baud") 
         self.EMBaudCbx = ttk.Combobox(self.frame3a, width=6, values=[50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800, 9600, 19200, 38400, 57600, 115200]) 
@@ -223,6 +244,11 @@ class EMApp(ttk.Frame):
         self.EM_NeedsTickleVal.set(config['EM']['NeedsTickle'])
         self.EM_NeedsTickleBtn = ttk.Checkbutton(frame3b, text="Sleepy", variable=self.EM_NeedsTickleVal) 
         self.EM_NeedsTickleBtn.grid(row=0, column = 2, padx=5, pady=6, sticky="e")
+
+        self.EM_useGPS= tk.BooleanVar()
+        self.EM_useGPS.set(config['EM']['useGPS'])
+        self.EM_useGPSBtn = ttk.Checkbutton(frame3b, text="Use GPS", variable=self.EM_useGPS) 
+        self.EM_useGPSBtn.grid(row=0, column = 3, padx=5, pady=6, sticky="e")
 
         self.PRP0Lab = ttk.Label(self.frame3, text="PRP0") 
         self.PRP0Lab.grid(row=2, column = 0, pady=5)
@@ -419,14 +445,17 @@ class EMApp(ttk.Frame):
 
         self.EMModeLab.grid(row=0, column = 0, padx=5, pady=6)
         self.EMModeCbBx.grid(row=0, column = 1, padx=5, pady=6)
+        if (config['EM']['Mode'] == "IP"):
+            self.EMAddrLab.grid(row=1, column = 0, padx=5, pady=6)
+            self.EMAddr.grid(row=1, column = 1, padx=5, pady=6)
+
         if (config['EM']['Mode'] == "Serial"):
             self.EMBaudLab.grid(row=0, column = 2, padx=5, pady=6)
             self.EMBaudCbx.grid(row=0, column = 3, padx=5, pady=6)
             self.EMBaudCbx.set(config['EM']['Baud'])
-
-        self.EMLab.grid(row=1, column = 0, padx=5, pady=6)
-        self.EMCbBx.grid(row=1, column = 1, padx=5, pady=6)
-        self.EMDescLab.grid(row=1, column = 2, padx=5, sticky=tk.W+tk.E, columnspan=6)
+            self.EMLab.grid(row=1, column = 0, padx=5, pady=6)
+            self.EMCbBx.grid(row=1, column = 1, padx=5, pady=6)
+            self.EMDescLab.grid(row=1, column = 2, padx=5, sticky=tk.W+tk.E, columnspan=6)
 
     def onSelectModeGPS(self, evt):
         value = "Undefined"
@@ -498,6 +527,8 @@ class EMApp(ttk.Frame):
                 self.EMDescLab.configure(text=desc) 
             else:
                 self.EMDescLab.configure(text="")
+        #if (value == "IP"):
+        # not necessary - already linked   self.EM_IPAddress.set(config['EM']['Address'])
 
         self.restartEMFlag.set()
         self.lastEMTime = datetime.datetime.now() 
@@ -612,6 +643,7 @@ class EMApp(ttk.Frame):
 
         self.errMsg.configure(text=self.errMsgText, background="red", foreground="white")
         self.errMsg.place(relx=0.5, rely=0.25, relwidth=0.5, relheight=0.5)
+        print("showMessage: " + text)
 
     def clearMessage(self):
         if (self.errMsgText != ""):
@@ -936,7 +968,7 @@ class EMApp(ttk.Frame):
     def openComms(self, cfg):
         print("Opening " + cfg['Mode'] + ' ' + cfg['Address'])
         s = self.openCommsReal(cfg)
-        if (hasattr(s, "write")):
+        if (cfg['Mode'] == "Serial" and hasattr(s, "write")):
             try: 
                 s.write(b'%\r\n') # Sometimes this is needed, sometimes not...
             except:
@@ -969,7 +1001,7 @@ class EMApp(ttk.Frame):
             else:
                 port = 1
             s.connect((host, port))
-            s.setblocking(0)
+            #s.setblocking(0)
             s.settimeout(5)
 
         elif (cfg['Mode'] == "Serial"):
@@ -1004,7 +1036,7 @@ class EMApp(ttk.Frame):
                     self.H1Val.set(H)
                     self.GPSQualityVal.set(Q)
                 return 1
-        elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
+        elif useGPS and len(splitlines) >= 8 and ("GPVTG" in splitlines[0] or "GNVTG" in splitlines[0]): # http://aprs.gids.nl/nmea/#vtg
             ok = False
             Track = 0.0
             Speed = 0.0
@@ -1179,7 +1211,7 @@ class EMApp(ttk.Frame):
                         linedata = line[:line.find('\n')]
                         line = line[line.find('\n')+1:]
 
-                        if self.nmea_decode(linedata, useGPS=False): 
+                        if self.nmea_decode(linedata, useGPS = self.EM_useGPS): 
                             self.lastEMTime = datetime.datetime.now()
 
                         if (config['EM']['NeedsTickle'] and hasattr(s, "write")):
@@ -1197,7 +1229,6 @@ class EMApp(ttk.Frame):
                     # end while    
                 except Exception as e:
                     self.showMessage(" EM: " + str(e))
-                    #self.showMessage("Cant open " + cfg['Address'] )
                     self.errMsgSource.append("EM")
                     pass
                 if (s is not None):
@@ -1246,6 +1277,7 @@ class EMApp(ttk.Frame):
 
             self.BTPortDescriptions['00:12:6f:00:c1:fb'] = "DualEM278 long"
             self.BTPortDescriptions['34:c9:f0:86:62:9a'] = "DualEM292 short"
+            self.BTPortDescriptions['00:1D:4B:06:07:80'] = "DualEM394 1S"
             self.BTPortDescriptions['b8:d6:1a:0d:9a:22'] = "Facet Rover-9A22"
             self.BTPortDescriptions['dd:ee:ff:aa:bb:cc'] = "Sample BT 1 (garbage)"
 
