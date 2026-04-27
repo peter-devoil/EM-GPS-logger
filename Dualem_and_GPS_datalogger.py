@@ -97,7 +97,7 @@ class EMApp(ttk.Frame):
         self.numEMErrors = 0
         self.lastBellTime = datetime.datetime.now() #- datetime.timedelta(seconds=10)
     
-    # IP addresses are text entries, and needs a restart when changed (the dropdowns dont)
+    # IP addresses are text entries, and th monitor needs a restart when changed (the dropdowns do this via callbacks)
     def IPHostCallback (self, section, variable):
         hasChanged = False
         if config[section]["Address"] != variable.get():
@@ -107,7 +107,7 @@ class EMApp(ttk.Frame):
 
         if hasChanged and section == 'EM':
             self.restartEMFlag.set()
-        if hasChanged and section == 'GPS':
+        if hasChanged and section == 'GPS1':
             self.restartGPS1Flag.set()
 
         self.saveConfig()
@@ -242,12 +242,14 @@ class EMApp(ttk.Frame):
 
         self.EM_NeedsTickleVal= tk.BooleanVar()
         self.EM_NeedsTickleVal.set(config['EM']['NeedsTickle'])
-        self.EM_NeedsTickleBtn = ttk.Checkbutton(frame3b, text="Sleepy", variable=self.EM_NeedsTickleVal) 
+        self.EM_NeedsTickleBtn = ttk.Checkbutton(frame3b, text="Sleepy", variable=self.EM_NeedsTickleVal, 
+                                                 command = self.saveConfig) 
         self.EM_NeedsTickleBtn.grid(row=0, column = 2, padx=5, pady=6, sticky="e")
 
         self.EM_useGPS= tk.BooleanVar()
         self.EM_useGPS.set(config['EM']['useGPS'])
-        self.EM_useGPSBtn = ttk.Checkbutton(frame3b, text="Use GPS", variable=self.EM_useGPS) 
+        self.EM_useGPSBtn = ttk.Checkbutton(frame3b, text="Use GPS", variable=self.EM_useGPS, 
+                                            command = self.saveConfig) 
         self.EM_useGPSBtn.grid(row=0, column = 3, padx=5, pady=6, sticky="e")
 
         self.PRP0Lab = ttk.Label(self.frame3, text="PRP0") 
@@ -1211,7 +1213,7 @@ class EMApp(ttk.Frame):
                         linedata = line[:line.find('\n')]
                         line = line[line.find('\n')+1:]
 
-                        if self.nmea_decode(linedata, useGPS = self.EM_useGPS): 
+                        if self.nmea_decode(linedata, useGPS = self.EM_useGPS.get()): 
                             self.lastEMTime = datetime.datetime.now()
 
                         if (config['EM']['NeedsTickle'] and hasattr(s, "write")):
@@ -1343,6 +1345,8 @@ class EMApp(ttk.Frame):
                 config['Bluetooth']["Recent"] = config['Bluetooth']["Recent"]+"," + curr
 
         config['Output']['Frequency'] = str(self.OutputFrequency.get())
+        config['EM']['useGPS'] = str(self.EM_useGPS.get())
+        config['EM']['NeedsTickle'] = str(self.EM_NeedsTickleVal.get())
 
         with open('Dualem_and_GPS_datalogger.ini', 'w') as configfile:
             config.write(configfile)
