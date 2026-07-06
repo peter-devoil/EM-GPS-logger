@@ -141,34 +141,36 @@ function updateData (json) {
         }
     });
 
+    if (features.length > 0) {
+        var newChannels = Object.keys(features[0].properties)
+            .filter((c) => c.indexOf("EM_") >=0);
+
+        newChannels.forEach(dataName => {
+            if (!theData.channels.some(c2 => c2.dataName == dataName )) {
+                var prettyName = dataName.replace("EM_", "")
+                theData.channels.push({
+                    active: wasSelected(prettyName),
+                    dataName: dataName,
+                    displayName: prettyName
+                });
+            }
+        });
+    
+        theData.channels.forEach( c => {
+            if (typeof theData.lowerBounds[c.dataName] == "undefined") {
+                theData.lowerBounds[c.dataName] = 1000000;
+            }
+            if (typeof theData.upperBounds[c.dataName] == "undefined") {
+                theData.upperBounds[c.dataName] = -1000000;
+            }
+        });
+    
+        myTrace.addData( traceElement, theData );
+        myMap.addData( mapElement, theData );
+    }
+
     theData.status = json.status;
     var numRemainingToDownload = theData.status.numRemaining; 
-
-    var newChannels = Object.keys(features[0].properties)
-        .filter((c) => c.indexOf("EM_") >=0);
-
-    newChannels.forEach(dataName => {
-        if (!theData.channels.some(c2 => c2.dataName == dataName )) {
-            var prettyName = dataName.replace("EM_", "")
-            theData.channels.push({
-                active: wasSelected(prettyName),
-                dataName: dataName,
-                displayName: prettyName
-            });
-        }
-    });
-
-    theData.channels.forEach( c => {
-        if (typeof theData.lowerBounds[c.dataName] == "undefined") {
-            theData.lowerBounds[c.dataName] = 1000000;
-        }
-        if (typeof theData.upperBounds[c.dataName] == "undefined") {
-            theData.upperBounds[c.dataName] = -1000000;
-        }
-    });
-    
-    myTrace.addData( traceElement, theData );
-    myMap.addData( mapElement, theData );
     return(numRemainingToDownload)
 }
 
