@@ -85,16 +85,20 @@ function isEqCT(x, y) {
 
 let backoffDelay = 0;
 async function pollForMore() {
-    var since = 0
+    var since = 0;
+    var maxrecs = 10; // 1/2 hr @ 2 samples/sec
     try {
         var features = theData.features.features;
         if (features.length > 0) {
             since = features.last().properties.id;
         }
-        var url = location.origin + "/getData?since=" + parseInt(since);
+        var url = location.origin + "/getData?since=" + since.toString() + "&maxrecs=" + maxrecs.toString();
         var json = await fetch(url, { signal: AbortSignal.timeout(4000) })
             .then(res => res.json());
-        if (json != null) updateData(json);
+        var numRemaining = 0;
+        if (json != null) {
+            numRemaining = updateData(json);
+        }
         lastUpdateTime = Date.now();
         backoffDelay = 0;
     } catch(err) { 
@@ -106,16 +110,19 @@ async function pollForMore() {
             console.log(`Polling Error: type: ${err.name}, message: ${err.message}`); //fixme - show message
         }
     }
-    pollingID = setTimeout(pollForMore, updateInterval + backoffDelay);
+    pollingID = setTimeout(pollForMore, 
+        (numRemaining > 0) ?  0 : updateInterval + backoffDelay);
 }
 
 function stopInterval() {
     clearTimeout(pollingID);
 }
 
+// fixme Needs to do chunked transfers so that it doesnt choke on multimegabyte data
 function updateData (json) {
     var features = theData.features.features
     var lastid = 0;
+    var firstid = 0;
     if (features.length > 0) {
         var x= features.last().properties;
         lastid = x.id;
@@ -136,6 +143,7 @@ function updateData (json) {
     });
 
     theData.status = json.status;
+    var numRemainingToDownload = theData.status.numRemaining; 
 
     //csv2geojson.csv2geojson(theData.data.slice(theData.features.length, theData.data.length), { latfield: 'Y',lonfield: 'X'}, 
     //csv2geojson.csv2geojson(theData.data, { latfield: 'Y',lonfield: 'X'}, 
@@ -168,6 +176,7 @@ function updateData (json) {
     
     myTrace.addData( traceElement, theData );
     myMap.addData( mapElement, theData );
+    return(numRemainingToDownload)
 }
 
 // Save the EM data to a file.

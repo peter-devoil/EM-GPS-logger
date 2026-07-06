@@ -5,7 +5,6 @@ from mavsdk import telemetry
 import asyncio
 import socket
 import os
-from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
 import math
 import sys
@@ -20,7 +19,10 @@ import unicodedata
 import string
 import csv
 import serial
+import gps
 import subprocess
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
 
 #from tendo import singleton
 # 
@@ -72,19 +74,25 @@ def MakeHandlerClassWithBakedInApp(app):
         def __init__(self, *args, **kwargs):
             self.emApp = app
             super().__init__(*args, **kwargs)
-       
+
+        def log_message(self, format, *args):
+            if (not args[0].startswith("GET")):
+                super().log_message( format, *args)
+
         def do_GET(self):
             if self.path.startswith("/getData"):
                 since = -1
+                maxrecs = 1440
                 try:
                     p = urllib.parse.urlparse(self.requestline)
                     q = dict(urllib.parse.parse_qsl(p.query.split(" ")[0]))
                     since = int(q['since'])
+                    maxrecs = int(q['maxrecs'])
                 except:
-                        print("?since = " + self.requestline)
+                        print("? since = " + self.requestline)
                         since = 0
                 if (since >= 0):
-                    self.getData( since )
+                    self.getData( since, maxrecs )
 
             elif self.path.startswith("/getLogs"):
                 log = subprocess.run("/usr/bin/journalctl -u Companion -o short -S today", shell = True, capture_output=True)
@@ -132,8 +140,11 @@ def MakeHandlerClassWithBakedInApp(app):
                     print("Failed \"" + self.path + "\" as " + os.path.splitext(path)[1][1:])
                     self.send_response(404)
 
-        def getData(self, since):
-            result = {'data': self.emApp.getRecords(since), 'status': self.emApp.StatusInfo()}
+        def getData(self, since, maxrecs):
+            recs = self.emApp.getRecords(since, maxrecs)
+            status = self.emApp.StatusInfo()
+            status['numRemaining'] = recs['numRemaining']
+            result = {'data': recs['data'], 'status': status}
             bData = bytes(json.dumps( result, ensure_ascii=False), 'utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
@@ -197,7 +208,7 @@ async def monitor_gpsVelocity(emApp, drone):
 # Will likely always be RTK fixed - rover will stop if GPS disappears
 async def monitor_gpsQuality(self, drone):
     async for p in drone.telemetry.gps_info():
-        self.GPSQuality = str(p.fix_type)
+        self.GPSQualityVal = 0 # fixme str(p.fix_type)
         #print(f"drone: qlty: {p}")
 
 
@@ -212,9 +223,6 @@ class EMApp():
         self.restartEMFlag = threading.Event()
         self.restartGPSFlag = threading.Event()
 
-        self.numEMErrors = 0
-        self.lastBellTime = datetime.datetime.now() #- datetime.timedelta(seconds=10)
-
         self.record = []
 
         # Default filenames
@@ -226,7 +234,7 @@ class EMApp():
         self.X1Val = 0.0
         self.Y1Val = 0.0
         self.H1Val = 0.0
-        self.GPSQuality = ""
+        self.GPSQualityVal = 0
 
         self.TrackVal= 0.0
         self.SpeedVal= 0.0
@@ -255,11 +263,14 @@ class EMApp():
         # When set, fires a regular reading to the continuous file
         self.running = None
 
-        self.errMsgText = ""
-        self.errMsgSource = []
+        self.err = {
+           'EMTimeout' : False, 
+           'EMError' : False, 
+           'GPSTimeout' : False, 
+           'GPSError' : False, 
+           'GPSQuality' : False }
         self.lastErrorTime = datetime.datetime.now() - datetime.timedelta(seconds=30)
 
-        self.errMsgSource = []
         self.OutputFrequency = float(config['Output']['Frequency'])
 
         self.workers = []
@@ -322,6 +333,7 @@ class EMApp():
         result['status'] = "Running" if self.writeOutput == "on" else "Idle"
         result['EM'] = "Error" if self.hasEMError() else "Ok"
         result['GPS'] = "Error" if self.hasGPSError() else "Ok"
+        result['GPSQuality'] = self.GPSQualityCode()
         result['Drone'] = self.droneState
         
         return(result)
@@ -344,27 +356,39 @@ class EMApp():
         if (self.stopFlag.is_set()):
               return
         try:
-            if (datetime.datetime.now() - self.lastErrorTime).total_seconds() > 10:
-                while "GPS" in self.errMsgSource: self.errMsgSource.remove("GPS")
-                while "EM" in self.errMsgSource: self.errMsgSource.remove("EM")
+            if (self.err['GPSError'] or \
+                self.err['EMError'] or \
+                self.err['GPSTimeout'] or \
+                self.err['EMTimeout']) and \
+                (datetime.datetime.now() - self.lastErrorTime).total_seconds() > 5:
+                self.err['GPSError'] = False
+                self.err['EMError'] = False
+                self.err['GPSTimeout'] = False
+                self.err['EMTimeout'] = False
+                print("Cleared error")
 
-            if not self.hasGPSError() and \
+            if not self.err['GPSTimeout'] and \
                     config['GPS']['Mode'] != "Undefined" and \
-                    (datetime.datetime.now() - self.lastGPSTime).total_seconds() > 5:
+                    (datetime.datetime.now() - self.lastGPSTime).total_seconds() > 2:
                 print("GPS Timeout")
-                self.errMsgSource.append("GPS")
+                self.err['GPSTimeout'] = True
                 self.restartGPSFlag.set()
+                self.lastErrorTime = datetime.datetime.now()
 
-            if not self.hasEMError() and \
+            if not self.err['EMTimeout'] and \
                     config['EM']['Mode'] != "Undefined" and \
-                    (datetime.datetime.now() - self.lastEMTime).total_seconds() > 5:
+                    (datetime.datetime.now() - self.lastEMTime).total_seconds() > 2:
                 print("EM Timeout")
-                self.errMsgSource.append("EM")
+                self.err['EMTimeout'] = True
                 self.restartEMFlag.set()
+                self.lastErrorTime = datetime.datetime.now()
 
         except Exception as e:
-            print("Monitor: " + e)
+            print("Monitor: " + str(e))
             pass
+
+        self.monitor = threading.Timer(0.250, self.doMonitor)
+        self.monitor.start()
 
     def startHTTPServer(self, args):
        # ip6 will accept ip4 connections as well, provided it's not bound to
@@ -377,7 +401,6 @@ class EMApp():
        except KeyboardInterrupt:
           pass
        webServer.server_close()
-
 
     def startDrone(self, args):
         print('drone: Connecting')
@@ -490,10 +513,10 @@ class EMApp():
         sys.exit(0)
 
     def hasEMError (self):
-        return "EM" in self.errMsgSource
+        return self.err['EMTimeout'] or self.err['EMError']
     
     def hasGPSError (self):
-        return "GPS" in self.errMsgSource
+        return self.err['GPSTimeout'] or self.err['GPSError']
 
     def getE1(self):
         with lock:
@@ -556,11 +579,14 @@ class EMApp():
 
     # Write to the continuous output file 
     def doit(self):
+        if self.X1Val == 0 or self.Y1Val == 0:
+            return
+
         time_now = datetime.datetime.now().strftime('%Y-%m-%d,%H:%M:%S.%f')
         if (self.writeOutput == "on"):
             line = time_now +  "," + \
                 str(self.X1Val) + "," + str(self.Y1Val) + "," + str(self.H1Val) + "," + \
-                str(self.SpeedVal) + "," + str(self.TrackVal) + "," + self.GPSQuality +\
+                str(self.SpeedVal) + "," + str(self.TrackVal) + "," + self.GPSQualityCode() +\
                     self.getE1() + \
                     '\n'
             with open(self.saveFile, 'a') as the_file:
@@ -568,7 +594,7 @@ class EMApp():
                 the_file.flush()
         self.recordPoint(time_now, self.writeOutput == "on", 
                          self.X1Val, self.Y1Val, self.H1Val,
-                         self.SpeedVal, self.TrackVal, self.GPSQuality,
+                         self.SpeedVal, self.TrackVal, self.GPSQualityCode(),
                          self.EM_PRP0Val,self.EM_PRP1Val, self.EM_PRP2Val, self.EM_PRP4Val, 
                          self.EM_HCP0Val,self.EM_HCP1Val, self.EM_HCP2Val, self.EM_HCP4Val,
                          self.EM_PRPI0Val,self.EM_PRPI1Val, self.EM_PRPI2Val, self.EM_PRPI4Val,
@@ -613,18 +639,18 @@ class EMApp():
                          'EM_Roll': EM_Roll})
 
     # return the last records since since.
-    def getRecords(self, since):
+    def getRecords(self, since, maxrecs):
         res = []
-        last = len(self.record) - 1
-        while last >= 0:
-            if self.record[last]['id'] > since:
-                res.append(self.record[last])
-            else:
-                break
-            last = last - 1
-        print("returning " + str(len(res)) + " records")
-        res.reverse()
-        return(res)
+        i = 0
+        while i < len(self.record) and len(res) < maxrecs:
+            if self.record[i]['id'] > since:
+                res.append(self.record[i])
+            i = i + 1
+        numRemaining = 0
+        while i < len(self.record):
+            numRemaining = numRemaining + 1
+            i = i + 1
+        return({'data' : res, 'numRemaining' : numRemaining})
 
     def openComms(self, cfg):
         print("Opening " + cfg['Mode'] + ' ' + cfg['Address'])
@@ -669,16 +695,41 @@ class EMApp():
             port = cfg['Address']
             baudrate = int(cfg['Baud'])
             s = serial.Serial(port, baudrate= baudrate, timeout=5, write_timeout=5)
+
+        elif (cfg['Mode'] == "gpsd"):
+            self.gpsPipe = subprocess.Popen(['/usr/bin/gpspipe', '--nmea'], stdout=subprocess.PIPE)
+            s = self.gpsPipe.stdout
+
         else:
             raise Exception("Unknown mode '" + cfg['Mode'] + "'")
         return s
 
+    def GPSQualityCode(self):
+        if (self.GPSQualityVal == 0): 
+            return "Invalid"
+        if (self.GPSQualityVal == 1): 
+            return "GPS"
+        if (self.GPSQualityVal == 2): 
+            return "Diff. GPS"
+        if (self.GPSQualityVal == 3): 
+            return "NA"
+        if (self.GPSQualityVal == 4): 
+            return "RTK Fixed"
+        if (self.GPSQualityVal == 5): 
+            return "RTK Float"
+        if (self.GPSQualityVal == 6): 
+            return "INS DeadR"
+        return "Unknown"
+
     # Decode a nmea string and set the associated TCL variable
+    # return 0 on error
     def nmea_decode(self, linedata, useGPS = True):
         splitlines = linedata.split(',')
         #print(splitlines)
         if useGPS and len(splitlines) >= 10 and ("GPGGA" in splitlines[0] or "GNGGA" in splitlines[0]):
             ok = False
+            E = 0
+            S = 0
             try:
                 S = decimal_degrees(*dm(float(splitlines[2])))
                 if splitlines[3].find('S') >= 0:
@@ -688,18 +739,21 @@ class EMApp():
                 Q = int(splitlines[6])
                 ok = True
             except:
-                print( "failed parsing GGA string: " +  linedata + "\n")
+                pass
 
-            if ok:
-                if (not E == 0) and (not S == 0):
-                    with lock:
-                        self.X1Val.set(E)
-                        self.Y1Val.set(S)
-                        self.H1Val.set(H)
-                        self.GPSQualityVal.set(Q)
-                    return 1
+            if ok and E != 0 and S != 0:
+                with lock:
+                    self.X1Val = E
+                    self.Y1Val = S
+                    self.H1Val = H
+                    self.GPSQualityVal = Q
+                return 1
+            else:
+                print( "failed parsing GGA string: " +  linedata + "\n")
             return 0
-        elif useGPS and len(splitlines) >= 8 and "GPVTG" in splitlines[0]: # http://aprs.gids.nl/nmea/#vtg
+
+        elif useGPS and len(splitlines) >= 8 and ("GPVTG" in splitlines[0]  or "GNVTG" in splitlines[0]): 
+            # http://aprs.gids.nl/nmea/#vtg
             ok = False
             Track = 0.0
             Speed = 0.0
@@ -711,13 +765,14 @@ class EMApp():
                     Speed = float(splitlines[7])
                     ok = True
             except:
-                print( "failed parsing VTG string: " +  linedata + "\n")
+                pass
 
             if ok:
                 with lock:
-                    self.TrackVal.set(Track)
-                    self.SpeedVal.set(Speed)
+                    self.TrackVal = Track
+                    self.SpeedVal = Speed
                 return 1
+            print( "failed parsing VTG string: " +  linedata + "\n")
             return 0
         elif len(splitlines) >= 6 and ("PDLM0" in splitlines[0] or "PDLMH" in splitlines[0]):
             with lock:
@@ -754,7 +809,8 @@ class EMApp():
                 self.EM_PitchVal = float(splitlines[3])
                 self.EM_RollVal = float(splitlines[4].split('*')[0])
             return 1
-        return 0
+        # we don't care about this line
+        return 1
 
     # The gps reader thread
     def gps_read(self, cfgName):
@@ -768,7 +824,11 @@ class EMApp():
             else:
                 self.restartGPSFlag.clear()
                 self.lastGPSTime = datetime.datetime.now()
-                while "GPS" in self.errMsgSource: self.errMsgSource.remove("GPS")
+
+                self.err['GPSTimeout'] = False
+                self.err['GPSError'] = False
+                #self.lastErrorTime = datetime.datetime.now() - datetime.timedelta(seconds=30)
+
                 self.X1Val = 0.0
                 self.Y1Val = 0.0
                 self.H1Val = 0.0
@@ -785,19 +845,21 @@ class EMApp():
                                 else:
                                     byt = s.read(s.in_waiting)
                                     line += str(byt, encoding) # serial "socket"
+                            elif (cfg['Mode'] == "gpsd"):
+                                line += str(self.gpsPipe.stdout.readline(), encoding)
                             else:
-                                try:
-                                    line += str(s.recv(1), encoding)  # BT, IP socket - has timeout set
-                                except socket.timeout as e:
-                                    err = e.args[0]
-                                    # this next if/else is a bit redundant, but illustrates how the
-                                    # timeout exception is setup
-                                    if err == 'timed out':
-                                        time.sleep(1)
-                                        print("gps: timeout detected")
-                                        continue
-                                    else:
-                                        raise e
+                                #try:
+                                line += str(s.recv(1), encoding)  # BT, IP socket - has timeout set
+                                #except socket.timeout as e:
+                                #    err = e.args[0]
+                                #    # this next if/else is a bit redundant, but illustrates how the
+                                #    # timeout exception is setup
+                                #    if err == 'timed out':
+                                #        time.sleep(1)
+                                #        print("gps: timeout detected")
+                                #        continue
+                                #    else:
+                                #        raise e
                                 #except socket.error as e:
                                 #    # Something else happened, handle error, exit, etc.
                                 #    print(e)
@@ -813,10 +875,14 @@ class EMApp():
 
                         if self.nmea_decode(linedata):
                             self.lastGPSTime = datetime.datetime.now()
+                        else: 
+                            self.err['GPSError'] = True
+                            self.lastErrorTime = datetime.datetime.now() 
 
                 except Exception as e:
                     print("gps: " + str(e))
-                    self.errMsgSource.append("GPS")
+                    self.err['GPSError'] = True
+                    self.lastErrorTime = datetime.datetime.now()
                     pass
                 if s is not None:
                     s.close()
@@ -829,7 +895,9 @@ class EMApp():
             self.lastEMTime = datetime.datetime.now()
             if (cfg['Mode'] != "Undefined"):
                 self.restartEMFlag.clear()
-                while "EM" in self.errMsgSource: self.errMsgSource.remove("EM")
+                self.err['EMTimeout'] = False
+                self.err['EMError'] = False
+                #self.lastErrorTime = datetime.datetime.now() - datetime.timedelta(seconds=30)
                 self.EM_HCP0Val = 0.0
                 self.EM_HCPI0Val = 0.0
                 self.EM_PRP0Val = 0.0
@@ -881,6 +949,9 @@ class EMApp():
                         
                         if self.nmea_decode(linedata, useGPS=False): 
                             self.lastEMTime = datetime.datetime.now()
+                        else:
+                            self.err['EMError'] = True
+
 
                         if (config['EM']['NeedsTickle'] and hasattr(s, "write")):
                             try: 
@@ -891,14 +962,16 @@ class EMApp():
                         ROLL = self.EM_RollVal
                         if float(abs(ROLL)) > 20:
                             print(' Roll angle: ' + str(ROLL))
-                            self.errMsgSource.append("EM")
+                            self.err['EMError'] = True
+                            self.lastErrorTime = datetime.datetime.now()
 
                         #print("stop= " + str(self.stopFlag.is_set()) + "," + "restart= " + str( self.restartEMFlag.is_set()))
                     # end while    
                 except Exception as e:
                     print(" EM: " + str(e))
                     #self.showMessage("Cant open " + cfg['Address'] )
-                    self.errMsgSource.append("EM")
+                    self.err['EMError'] = True
+                    self.lastErrorTime = datetime.datetime.now()
                     pass
                 if (s is not None):
                     s.close()
