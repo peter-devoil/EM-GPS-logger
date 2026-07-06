@@ -38,9 +38,9 @@ if (document.querySelector('#tabselect') !== null) {
 
     window.addEventListener("resize", (event) => {     
         if (mapElement.style.display == "none") {
-            element.style.display = 'block';
+            mapElement.style.display = 'block';
             myMap.initData(mapElement);
-            element.style.display = 'none';
+            mapElement.style.display = 'none';
         }  else {
             myMap.initData(mapElement);
         }
@@ -86,7 +86,7 @@ function isEqCT(x, y) {
 let backoffDelay = 0;
 async function pollForMore() {
     var since = 0;
-    var maxrecs = 10; // 1/2 hr @ 2 samples/sec
+    var maxrecs = 1440; // 1/2 hr @ 2 samples/sec
     try {
         var features = theData.features.features;
         if (features.length > 0) {
@@ -103,11 +103,11 @@ async function pollForMore() {
         backoffDelay = 0;
     } catch(err) { 
         if (err.name === "TimeoutError") {
-            console.log("Polling Timeout");//fixme - show message
+            console.log("Polling Timeout"); //fixme - show message
             backoffDelay = 5000;
         } else {
             // A network error, or some other problem.
-            console.log(`Polling Error: type: ${err.name}, message: ${err.message}`); //fixme - show message
+            console.log(`Polling Error: ${err.message}`); //fixme - show message
         }
     }
     pollingID = setTimeout(pollForMore, 
@@ -118,11 +118,10 @@ function stopInterval() {
     clearTimeout(pollingID);
 }
 
-// fixme Needs to do chunked transfers so that it doesnt choke on multimegabyte data
+// Do chunked transfers so that it doesnt choke on multimegabyte data. 
 function updateData (json) {
     var features = theData.features.features
     var lastid = 0;
-    var firstid = 0;
     if (features.length > 0) {
         var x= features.last().properties;
         lastid = x.id;
@@ -144,12 +143,6 @@ function updateData (json) {
 
     theData.status = json.status;
     var numRemainingToDownload = theData.status.numRemaining; 
-
-    //csv2geojson.csv2geojson(theData.data.slice(theData.features.length, theData.data.length), { latfield: 'Y',lonfield: 'X'}, 
-    //csv2geojson.csv2geojson(theData.data, { latfield: 'Y',lonfield: 'X'}, 
-    //        function(err, data) { 
-    //            theData.features = data
-    //});
 
     var newChannels = Object.keys(features[0].properties)
         .filter((c) => c.indexOf("EM_") >=0);
