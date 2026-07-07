@@ -161,7 +161,7 @@ def MakeHandlerClassWithBakedInApp(app):
     return Handler
 
 def doShutDown():
-    os.system( "sudo /usr/sbin/shutdown -h +1")
+    os.system( "sudo /usr/sbin/shutdown -H 5s")
     os._exit(1)
 
 # watch for a new mission appearing
@@ -550,12 +550,12 @@ class EMApp():
     def doitDummy(self):
         self.recordPoint(self.dummyData['YYYY-MM-DD'][self.dummyCtr] +',' + self.dummyData['HH:MM:SS.F'][self.dummyCtr], 
             self.writeOutput == "on", 
-            self.dummyData['Longitude 2'][self.dummyCtr], self.dummyData['Latitude 2'][self.dummyCtr],self.dummyData['Elevation 2'][self.dummyCtr],
-            self.dummyData['Speed 2'][self.dummyCtr], self.dummyData['Track 2'][self.dummyCtr], 'Unknown',
-            self.dummyData['EM PRPH'][self.dummyCtr],self.dummyData['EM PRP1'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], 
-            self.dummyData['EM HCPH'][self.dummyCtr],self.dummyData['EM HCP1'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr],
-            self.dummyData['EM PRPIH'][self.dummyCtr],self.dummyData['EM PRPI1'][self.dummyCtr], self.dummyData['EM PRPI2'][self.dummyCtr], self.dummyData['EM PRPI2'][self.dummyCtr], 
-            self.dummyData['EM HPCIH'][self.dummyCtr],self.dummyData['EM HCPI1'][self.dummyCtr], self.dummyData['EM HCPI2'][self.dummyCtr],self.dummyData['EM HCPI2'][self.dummyCtr],
+            self.dummyData['Longitude'][self.dummyCtr], self.dummyData['Latitude'][self.dummyCtr],self.dummyData['Elevation'][self.dummyCtr],
+            self.dummyData['Speed'][self.dummyCtr], self.dummyData['Track'][self.dummyCtr], 'Unknown',
+            self.dummyData['EM PRP0'][self.dummyCtr],self.dummyData['EM PRP1'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], self.dummyData['EM PRP2'][self.dummyCtr], 
+            self.dummyData['EM HCP0'][self.dummyCtr],self.dummyData['EM HCP1'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr], self.dummyData['EM HCP2'][self.dummyCtr],
+            self.dummyData['EM PRPI0'][self.dummyCtr],self.dummyData['EM PRPI1'][self.dummyCtr], self.dummyData['EM PRPI2'][self.dummyCtr], self.dummyData['EM PRPI2'][self.dummyCtr], 
+            self.dummyData['EM HCPI0'][self.dummyCtr],self.dummyData['EM HCPI1'][self.dummyCtr], self.dummyData['EM HCPI2'][self.dummyCtr],self.dummyData['EM HCPI2'][self.dummyCtr],
             self.dummyData['EM Volts'][self.dummyCtr],self.dummyData['EM Temperature'][self.dummyCtr],self.dummyData['EM Pitch'][self.dummyCtr], self.dummyData['EM Roll'][self.dummyCtr])
         self.dummyCtr = self.dummyCtr + 1
         self.lastGPSTime = datetime.datetime.now()

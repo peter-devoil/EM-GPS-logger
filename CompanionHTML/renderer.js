@@ -329,6 +329,10 @@ statusTimer = setInterval( async function() {
         sLbl.innerHTML += "<br>GPS Fault";
         hasWarning = true;
     }
+    if (theData.status.GPSQuality != "RTK Fixed") {
+        sLbl.innerHTML += "<br>Quality: " + theData.status.GPSQuality;
+        hasWarning = true;
+    }
 
     if(hasWarning) {
         var old = sLbl.style.backgroundColor;
